@@ -12,21 +12,43 @@ from app.config import settings
 from app.database import get_db
 from app.models import User, Patient, GlucoseReading, ClinicalData, Prediction
 from app.schemas import PredictionResponse, PredictionRequest
-from app.services.ml_model import DiabetesRiskModel
-from app.services.shap_explainer import ShapExplainer
-from app.services.alert_service import AlertService
+
+# Conditional imports — TensorFlow/ML may not be installed
+try:
+    from app.services.ml_model import DiabetesRiskModel, TF_AVAILABLE as ML_TF_AVAILABLE
+    from app.services.shap_explainer import ShapExplainer
+    from app.services.alert_service import AlertService
+    ML_AVAILABLE = True
+except ImportError as e:
+    ML_AVAILABLE = False
+    ML_TF_AVAILABLE = False
+    DiabetesRiskModel = None
+    ShapExplainer = None
+    AlertService = None
+    logging.getLogger(__name__).warning(
+        "ML modules not fully available (%s). Using heuristic scoring.", e
+    )
+
+# Import AlertService separately since it doesn't depend on TF
+try:
+    from app.services.alert_service import AlertService
+except ImportError:
+    AlertService = None
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Predictions"])
 
 # Lazy-loaded model singleton
-_model_instance: DiabetesRiskModel | None = None
+_model_instance = None
 
 
-def _get_model() -> DiabetesRiskModel:
-    """Load the ML model lazily (singleton pattern)."""
+def _get_model():
+    """Load the ML model lazily (singleton pattern). Returns None if unavailable."""
     global _model_instance
+    if not ML_AVAILABLE:
+        return None
+
     if _model_instance is None or not _model_instance.is_loaded:
         model_path = settings.MODEL_PATH
         if os.path.exists(model_path):
@@ -174,11 +196,11 @@ async def predict_patient(
     )
     clinical = clinical_result.scalar_one_or_none()
 
-    warnings = []
+    warnings_list = []
     if clinical is None:
-        warnings.append("No clinical data available. Prediction may be less accurate.")
+        warnings_list.append("No clinical data available. Prediction may be less accurate.")
     elif clinical.created_at < datetime.utcnow() - timedelta(days=settings.CLINICAL_DATA_EXPIRY_DAYS):
-        warnings.append(
+        warnings_list.append(
             f"Clinical data is older than {settings.CLINICAL_DATA_EXPIRY_DAYS} days. "
             "Consider updating clinical measurements."
         )
@@ -202,10 +224,10 @@ async def predict_patient(
             }
 
             # Run ML prediction
-            result = model.predict(glucose_list, clinical_dict)
-            risk_probability = result["risk_probability"]
-            risk_level = result["risk_level"]
-            confidence = result["confidence"]
+            pred_result = model.predict(glucose_list, clinical_dict)
+            risk_probability = pred_result["risk_probability"]
+            risk_level = pred_result["risk_level"]
+            confidence = pred_result["confidence"]
 
             # Run SHAP explainer
             try:
@@ -241,100 +263,3 @@ async def predict_patient(
     db.add(prediction)
     await db.flush()
     await db.refresh(prediction)
-
-    # Create alert if needed
-    try:
-        alert_service = AlertService(db)
-        await alert_service.check_and_create_alerts(prediction)
-    except Exception as alert_exc:
-        logger.warning("Failed to create alert: %s", alert_exc)
-
-    # Build response
-    response_data = {
-        "id": prediction.id,
-        "patient_id": prediction.patient_id,
-        "risk_probability": prediction.risk_probability,
-        "risk_level": prediction.risk_level,
-        "confidence": prediction.confidence,
-        "glucose_readings_used": prediction.glucose_readings_used,
-        "model_version": prediction.model_version,
-        "shap_values": shap_values,
-        "predicted_by": prediction.predicted_by,
-        "created_at": prediction.created_at,
-    }
-
-    return PredictionResponse(**response_data)
-
-
-@router.get("/predictions/{patient_id}", response_model=list[PredictionResponse])
-async def get_patient_predictions(
-    patient_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(Prediction)
-        .where(Prediction.patient_id == patient_id)
-        .order_by(desc(Prediction.created_at))
-        .limit(50)
-    )
-    predictions = result.scalars().all()
-
-    response_list = []
-    for p in predictions:
-        shap = None
-        if p.shap_values_json:
-            try:
-                shap = json.loads(p.shap_values_json)
-            except json.JSONDecodeError:
-                shap = None
-        response_list.append(
-            PredictionResponse(
-                id=p.id,
-                patient_id=p.patient_id,
-                risk_probability=p.risk_probability,
-                risk_level=p.risk_level,
-                confidence=p.confidence,
-                glucose_readings_used=p.glucose_readings_used,
-                model_version=p.model_version,
-                shap_values=shap,
-                predicted_by=p.predicted_by,
-                created_at=p.created_at,
-            )
-        )
-    return response_list
-
-
-@router.get("/predictions", response_model=list[PredictionResponse])
-async def get_all_recent_predictions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(Prediction).order_by(desc(Prediction.created_at)).limit(100)
-    )
-    predictions = result.scalars().all()
-
-    response_list = []
-    for p in predictions:
-        shap = None
-        if p.shap_values_json:
-            try:
-                shap = json.loads(p.shap_values_json)
-            except json.JSONDecodeError:
-                shap = None
-        response_list.append(
-            PredictionResponse(
-                id=p.id,
-                patient_id=p.patient_id,
-                risk_probability=p.risk_probability,
-                risk_level=p.risk_level,
-                confidence=p.confidence,
-                glucose_readings_used=p.glucose_readings_used,
-                model_version=p.model_version,
-                shap_values=shap,
-                predicted_by=p.predicted_by,
-                created_at=p.created_at,
-            )
-        )
-    return response_list
