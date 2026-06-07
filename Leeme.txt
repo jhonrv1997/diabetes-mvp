@@ -1,0 +1,12 @@
+Credenciales por defecto
+Admin: admin / admin123
+Enfermera: enfermera / enfermera123
+-------------------------------------
+Para ejecutar
+cd diabetes-mvp
+chmod +x start.sh
+./start.sh
+--------------------------------------
+Frontend: http://localhost:5173
+Backend: http://localhost:8000
+API Docs: http://localhost:8000/docs
