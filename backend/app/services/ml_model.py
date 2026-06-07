@@ -21,9 +21,17 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import joblib
 
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers  # type: ignore
+# TensorFlow is optional — the server can run with heuristic scoring
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras import layers  # type: ignore
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
+    tf = None
+    keras = None
+    layers = None
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +51,7 @@ class DiabetesRiskModel:
     }
 
     def __init__(self, model_path: Optional[str] = None):
-        self.model: Optional[keras.Model] = None
+        self.model: Optional[object] = None
         self.scaler_glucose: Optional[MinMaxScaler] = None
         self.scaler_clinical: Optional[MinMaxScaler] = None
         self.is_loaded: bool = False
@@ -81,14 +89,14 @@ class DiabetesRiskModel:
 
     # ── Model architecture ─────────────────────────────────────────────────
 
-    def build_model(self, seq_length: int = 90, n_features: int = 6) -> keras.Model:
+    def build_model(self, seq_length: int = 90, n_features: int = 6):
         """
         Build the CNN-LSTM architecture using the Keras Functional API.
 
         Parameters
         ----------
         seq_length : int
-            Number of time-steps in the glucose input (default 90 ≈ 30 days × 3 readings).
+            Number of time-steps in the glucose input (default 90).
         n_features : int
             Number of static clinical features (default 6).
 
@@ -97,6 +105,12 @@ class DiabetesRiskModel:
         keras.Model
             Compiled model ready for training.
         """
+        if not TF_AVAILABLE:
+            raise RuntimeError(
+                "TensorFlow no esta instalado. "
+                "Instalalo con: pip install tensorflow==2.15.0"
+            )
+
         self.seq_length = seq_length
         self.n_features = n_features
 
@@ -221,6 +235,11 @@ class DiabetesRiskModel:
         dict
             Training history with keys: loss, accuracy, auc, val_loss, etc.
         """
+        if not TF_AVAILABLE:
+            raise RuntimeError(
+                "TensorFlow no esta instalado. No se puede entrenar el modelo."
+            )
+
         if self.model is None:
             self.build_model(
                 seq_length=X_glucose.shape[1],
@@ -248,8 +267,7 @@ class DiabetesRiskModel:
         )
         self.model.optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
 
-        # Callbacks — only EarlyStopping (ReduceLROnPlateau is incompatible
-        # with CosineDecay schedule, which already handles LR decay)
+        # Callbacks
         callbacks = [
             keras.callbacks.EarlyStopping(
                 monitor="val_loss",
@@ -301,7 +319,7 @@ class DiabetesRiskModel:
         aggregated_history: dict[str, list[float]] = {}
 
         for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_glucose, y)):
-            logger.info("── Fold %d/%d ──", fold_idx + 1, n_folds)
+            logger.info("-- Fold %d/%d --", fold_idx + 1, n_folds)
 
             # Re-build model for each fold to reset weights
             self.build_model(
@@ -360,7 +378,7 @@ class DiabetesRiskModel:
         for metric_name in fold_metrics[0]:
             vals = [fm[metric_name] for fm in fold_metrics]
             logger.info(
-                "CV %s: %.4f ± %.4f", metric_name, np.mean(vals), np.std(vals)
+                "CV %s: %.4f +/- %.4f", metric_name, np.mean(vals), np.std(vals)
             )
 
         return aggregated_history
@@ -432,8 +450,6 @@ class DiabetesRiskModel:
         risk_color = self.RISK_COLORS[risk_level]
 
         # ── Confidence estimate ──────────────────────────────────────────
-        # Distance from decision boundary gives a simple confidence score
-        # Closer to 0 or 1 → higher confidence; closer to 0.5 → lower confidence
         confidence = round(abs(probability - 0.5) * 2.0, 4)
 
         result = {
@@ -453,15 +469,11 @@ class DiabetesRiskModel:
     ) -> dict:
         """
         Compute gradient-based feature importance for a single prediction.
-
-        Uses integrated-gradients-style approach: compute the gradient of the
-        output w.r.t. each input feature and average the absolute gradients.
-
-        Returns
-        -------
-        dict
-            {feature_name: importance_score}
+        Requires TensorFlow.
         """
+        if not TF_AVAILABLE:
+            raise RuntimeError("TensorFlow is required for feature importance.")
+
         if self.model is None:
             raise RuntimeError("Model is not loaded.")
 
@@ -510,7 +522,7 @@ class DiabetesRiskModel:
         glucose_mean_importance = float(np.mean(glucose_grads))
         glucose_std_importance = float(np.std(glucose_grads))
 
-        # Compute trend from glucose readings (simple linear regression slope)
+        # Compute trend from glucose readings
         if len(glucose_readings) > 1:
             x_vals = np.arange(len(glucose_readings), dtype=np.float64)
             y_vals = np.array(glucose_readings, dtype=np.float64)
@@ -566,12 +578,11 @@ class DiabetesRiskModel:
     def save(self, path: str) -> None:
         """
         Save model, scalers, and metadata to disk.
-
-        Parameters
-        ----------
-        path : str
-            Directory path to save artifacts.
+        Requires TensorFlow.
         """
+        if not TF_AVAILABLE:
+            raise RuntimeError("TensorFlow is required to save the model.")
+
         if self.model is None:
             raise RuntimeError("No model to save.")
 
@@ -603,12 +614,15 @@ class DiabetesRiskModel:
     def load(self, path: str) -> None:
         """
         Load model, scalers, and metadata from disk.
-
-        Parameters
-        ----------
-        path : str
-            Directory path containing saved artifacts.
+        Requires TensorFlow.
         """
+        if not TF_AVAILABLE:
+            logger.warning(
+                "TensorFlow no esta instalado. No se puede cargar el modelo. "
+                "El servidor usara scoring heuristico."
+            )
+            return
+
         model_path = os.path.join(path, "model.keras")
         scaler_g_path = os.path.join(path, "scaler_glucose.joblib")
         scaler_c_path = os.path.join(path, "scaler_clinical.joblib")
@@ -660,28 +674,7 @@ class DiabetesRiskModel:
         X: np.ndarray,
         n_variants: int = 5,
     ) -> np.ndarray:
-        """
-        Generate augmented data variants for a single glucose sequence.
-
-        Augmentation strategies:
-          1. Jitter — add Gaussian noise (σ=0.02)
-          2. Scaling — multiply by random factor in [0.9, 1.1]
-          3. Window slicing — randomly crop and pad
-          4. Permutation — shuffle segments
-          5. Interpolation — resample at random rate
-
-        Parameters
-        ----------
-        X : np.ndarray
-            Single glucose sequence of shape (seq_length, 1).
-        n_variants : int
-            Number of augmented copies to produce.
-
-        Returns
-        -------
-        np.ndarray
-            Augmented sequences of shape (n_variants, seq_length, 1).
-        """
+        """Generate augmented data variants for a single glucose sequence."""
         seq = X.flatten()
         augmented = []
 
@@ -699,12 +692,11 @@ class DiabetesRiskModel:
                 aug = seq * scale_factor
 
             elif strategy == 2:
-                # Window slicing — crop a random contiguous window and pad
+                # Window slicing
                 window_ratio = np.random.uniform(0.8, 1.0)
                 window_len = max(int(len(seq) * window_ratio), 1)
                 start = np.random.randint(0, len(seq) - window_len + 1)
                 window = seq[start: start + window_len]
-                # Pad to original length
                 pad_before = start
                 pad_after = len(seq) - start - window_len
                 aug = np.concatenate(
@@ -712,7 +704,7 @@ class DiabetesRiskModel:
                 )
 
             elif strategy == 3:
-                # Permutation — divide into segments and shuffle
+                # Permutation
                 n_segments = np.random.randint(3, 7)
                 seg_len = max(len(seq) // n_segments, 1)
                 segments = []
@@ -728,12 +720,11 @@ class DiabetesRiskModel:
                     )
 
             else:
-                # Interpolation — resample with random rate
+                # Interpolation
                 from scipy.interpolate import interp1d
 
                 orig_len = len(seq)
                 indices = np.arange(orig_len)
-                # Random subset of points
                 n_keep = max(int(orig_len * np.random.uniform(0.6, 0.95)), 4)
                 keep_idx = np.sort(np.random.choice(orig_len, n_keep, replace=False))
                 if len(keep_idx) < 2:
@@ -786,12 +777,10 @@ class DiabetesRiskModel:
         X_clinical: np.ndarray,
     ) -> None:
         """Fit scalers on training data."""
-        # Glucose: flatten all readings to fit scaler
         all_glucose = X_glucose.reshape(-1, 1)
         self.scaler_glucose = MinMaxScaler(feature_range=(0, 1))
         self.scaler_glucose.fit(all_glucose)
 
-        # Clinical: fit on clinical matrix
         self.scaler_clinical = MinMaxScaler(feature_range=(0, 1))
         self.scaler_clinical.fit(X_clinical)
 
@@ -809,19 +798,7 @@ class DiabetesRiskModel:
     # ── Risk classification ─────────────────────────────────────────────────
 
     def _classify_risk(self, probability: float) -> str:
-        """
-        Classify risk level from probability.
-
-        Parameters
-        ----------
-        probability : float
-            Risk probability in [0, 1].
-
-        Returns
-        -------
-        str
-            "low", "medium", or "high".
-        """
+        """Classify risk level from probability."""
         if probability >= self.RISK_HIGH_THRESHOLD:
             return "high"
         elif probability >= self.RISK_LOW_THRESHOLD:
@@ -834,7 +811,7 @@ class DiabetesRiskModel:
     def summary(self) -> str:
         """Return a string summary of the model architecture."""
         if self.model is None:
-            return "Model not built yet."
+            return "Model not built yet. TensorFlow may not be installed."
         summary_parts = []
         self.model.summary(print_fn=lambda line: summary_parts.append(line))
         return "\n".join(summary_parts)

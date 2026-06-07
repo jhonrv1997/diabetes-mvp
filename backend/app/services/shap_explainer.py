@@ -4,25 +4,24 @@ SHAP-like Explainability Service for the Diabetes Risk Model.
 Computes gradient-based feature importance for individual predictions
 and aggregates global importance across a dataset.
 
-Features tracked:
-  - glucose_avg       : mean glucose over the observation window
-  - glucose_std       : standard deviation of glucose readings
-  - glucose_trend     : linear trend (slope) of glucose over time
-  - age               : patient age
-  - bmi               : body mass index
-  - systolic_bp       : systolic blood pressure
-  - diastolic_bp      : diastolic blood pressure
-  - family_diabetes   : family history of diabetes (0/1)
-  - hypertension      : personal history of hypertension (0/1)
+Requires TensorFlow for gradient computation.
+When TensorFlow is not available, provides a heuristic fallback.
 """
 
 import logging
 from typing import Optional
 
 import numpy as np
-import tensorflow as tf
 
-from app.services.ml_model import DiabetesRiskModel
+# TensorFlow is optional
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
+    tf = None
+
+from app.services.ml_model import DiabetesRiskModel, TF_AVAILABLE as MODEL_TF_AVAILABLE
 
 logger = logging.getLogger(__name__)
 
@@ -55,25 +54,14 @@ class ShapExplainer:
         n_steps: int = 50,
     ) -> dict:
         """
-        Generate a SHAP-like explanation for a single prediction using
-        integrated gradients.
+        Generate a SHAP-like explanation for a single prediction.
 
-        Parameters
-        ----------
-        glucose_readings : list[float]
-            Glucose measurements in mg/dL.
-        clinical_data : dict
-            Keys: age, bmi, systolic_bp, diastolic_bp, family_diabetes, hypertension.
-        n_steps : int
-            Number of interpolation steps for integrated gradients.
-
-        Returns
-        -------
-        dict
-            {feature_name: shap_value} for each of the 9 tracked features,
-            plus a ``base_value`` (the model output at the baseline input)
-            and ``prediction`` (the actual model output).
+        If TensorFlow is available, uses integrated gradients.
+        Otherwise, falls back to a heuristic explanation.
         """
+        if not TF_AVAILABLE:
+            return self._heuristic_explanation(glucose_readings, clinical_data)
+
         if self.model_service.model is None:
             raise RuntimeError("Model is not loaded.")
 
@@ -108,12 +96,11 @@ class ShapExplainer:
         ).reshape(1, -1)
         actual_clinical = scaler_c.transform(clinical_vector)
 
-        # ── Baseline inputs (zeros = "absence" of signal) ────────────────
+        # ── Baseline inputs ──────────────────────────────────────────────
         baseline_glucose = np.zeros((1, seq_length, 1), dtype=np.float32)
         baseline_clinical = np.zeros((1, 6), dtype=np.float32)
 
         # ── Integrated gradients ─────────────────────────────────────────
-        # Accumulate gradients along the path from baseline → actual
         avg_grads_glucose = np.zeros((1, seq_length, 1), dtype=np.float64)
         avg_grads_clinical = np.zeros((1, 6), dtype=np.float64)
 
@@ -147,27 +134,21 @@ class ShapExplainer:
         ig_clinical = (actual_clinical_f - baseline_clinical_f) * avg_grads_clinical
 
         # ── Derive feature-level SHAP values ─────────────────────────────
-
-        # Glucose-derived features
         glucose_orig = glucose_arr.flatten()
         glucose_avg_val = float(np.mean(glucose_orig))
         glucose_std_val = float(np.std(glucose_orig)) if len(glucose_orig) > 1 else 0.0
 
-        # Trend: simple linear slope
         if len(glucose_orig) > 1:
             x_vals = np.arange(len(glucose_orig), dtype=np.float64)
             slope = float(np.polyfit(x_vals, glucose_orig.astype(np.float64), 1)[0])
         else:
             slope = 0.0
 
-        # Glucose SHAP: sum of absolute integrated gradients across time steps
         glucose_shap_total = float(np.sum(np.abs(ig_glucose)))
-        # Distribute proportionally based on how much each feature varies
-        glucose_shap_avg = glucose_shap_total * 0.4     # 40% to average level
-        glucose_shap_std = glucose_shap_total * 0.35     # 35% to variability
-        glucose_shap_trend = glucose_shap_total * 0.25   # 25% to trend
+        glucose_shap_avg = glucose_shap_total * 0.4
+        glucose_shap_std = glucose_shap_total * 0.35
+        glucose_shap_trend = glucose_shap_total * 0.25
 
-        # Clinical SHAP values (one per feature)
         clinical_shap = np.abs(ig_clinical).flatten()
 
         # ── Compute base value ───────────────────────────────────────────
@@ -202,7 +183,6 @@ class ShapExplainer:
             "hypertension": round(float(clinical_shap[5]), 6),
         }
 
-        # Feature values for context
         feature_values = {
             "glucose_avg": round(glucose_avg_val, 2),
             "glucose_std": round(glucose_std_val, 2),
@@ -215,14 +195,11 @@ class ShapExplainer:
             "hypertension": int(clinical_data.get("hypertension", 0)),
         }
 
-        # Normalized importance (sum to 1)
         total_shap = sum(abs(v) for v in shap_values.values()) + 1e-10
         normalized = {
             k: round(abs(v) / total_shap, 4) for k, v in shap_values.items()
         }
 
-        # Direction: positive SHAP → increases risk, negative → decreases
-        # For glucose features, we determine direction from the actual value
         direction = {}
         for feat in FEATURE_NAMES:
             val = feature_values.get(feat, 0)
@@ -252,81 +229,93 @@ class ShapExplainer:
             "prediction": round(prediction, 4),
         }
 
-    # ── Global importance across multiple predictions ───────────────────────
+    # ── Heuristic fallback (without TensorFlow) ─────────────────────────────
 
-    def get_global_importance(
+    def _heuristic_explanation(
         self,
-        patient_data_list: list[dict],
+        glucose_readings: list[float],
+        clinical_data: dict,
     ) -> dict:
         """
-        Compute global feature importance by averaging SHAP values
-        across multiple patient predictions.
-
-        Parameters
-        ----------
-        patient_data_list : list[dict]
-            Each element is a dict with keys:
-              - glucose_readings: list[float]
-              - clinical_data: dict
-
-        Returns
-        -------
-        dict
-            Sorted feature importance with keys:
-              - mean_abs_shap   : mean |SHAP| per feature
-              - ranked_features : features sorted by importance (descending)
-              - n_patients      : number of patients in the dataset
+        Provide a heuristic-based explanation when TensorFlow is not available.
         """
-        if not patient_data_list:
-            return {
-                "mean_abs_shap": {},
-                "ranked_features": [],
-                "n_patients": 0,
-            }
+        glucose_arr = np.array(glucose_readings, dtype=np.float32)
+        glucose_avg_val = float(np.mean(glucose_arr)) if len(glucose_arr) > 0 else 0.0
+        glucose_std_val = float(np.std(glucose_arr)) if len(glucose_arr) > 1 else 0.0
 
-        all_shap: dict[str, list[float]] = {f: [] for f in FEATURE_NAMES}
+        if len(glucose_arr) > 1:
+            x_vals = np.arange(len(glucose_arr), dtype=np.float64)
+            slope = float(np.polyfit(x_vals, glucose_arr.astype(np.float64), 1)[0])
+        else:
+            slope = 0.0
 
-        for patient in patient_data_list:
-            glucose_readings = patient.get("glucose_readings", [])
-            clinical_data = patient.get("clinical_data", {})
+        # Heuristic importance scores
+        shap_values = {}
 
-            if not glucose_readings or not clinical_data:
-                continue
+        # Glucose average importance
+        if glucose_avg_val >= 200:
+            shap_values["glucose_avg"] = 0.30
+        elif glucose_avg_val >= 140:
+            shap_values["glucose_avg"] = 0.20
+        elif glucose_avg_val >= 100:
+            shap_values["glucose_avg"] = 0.10
+        else:
+            shap_values["glucose_avg"] = 0.02
 
-            try:
-                explanation = self.explain_prediction(
-                    glucose_readings, clinical_data
-                )
-                for feat in FEATURE_NAMES:
-                    all_shap[feat].append(
-                        abs(explanation["shap_values"].get(feat, 0.0))
-                    )
-            except Exception as exc:
-                logger.warning("Failed to explain a patient: %s", exc)
-                continue
+        # Glucose variability
+        if glucose_std_val > 60:
+            shap_values["glucose_std"] = 0.15
+        elif glucose_std_val > 30:
+            shap_values["glucose_std"] = 0.08
+        else:
+            shap_values["glucose_std"] = 0.02
 
-        # Compute mean absolute SHAP
-        mean_abs_shap = {}
+        # Glucose trend
+        if slope > 1.0:
+            shap_values["glucose_trend"] = 0.10
+        elif slope > 0:
+            shap_values["glucose_trend"] = 0.05
+        else:
+            shap_values["glucose_trend"] = 0.01
+
+        # Clinical features
+        age = float(clinical_data.get("age", 50))
+        bmi = float(clinical_data.get("bmi", 25))
+        systolic = float(clinical_data.get("systolic_bp", 120))
+        diastolic = float(clinical_data.get("diastolic_bp", 80))
+        family = float(clinical_data.get("family_diabetes", 0))
+        hypertension = float(clinical_data.get("hypertension", 0))
+
+        shap_values["age"] = 0.12 if age >= 65 else (0.06 if age >= 45 else 0.02)
+        shap_values["bmi"] = 0.15 if bmi >= 35 else (0.10 if bmi >= 30 else (0.05 if bmi >= 25 else 0.02))
+        shap_values["systolic_bp"] = 0.10 if systolic >= 140 else (0.05 if systolic >= 130 else 0.02)
+        shap_values["diastolic_bp"] = 0.08 if diastolic >= 90 else (0.04 if diastolic >= 80 else 0.01)
+        shap_values["family_diabetes"] = 0.10 if family >= 1 else 0.02
+        shap_values["hypertension"] = 0.08 if hypertension >= 1 else 0.01
+
+        feature_values = {
+            "glucose_avg": round(glucose_avg_val, 2),
+            "glucose_std": round(glucose_std_val, 2),
+            "glucose_trend": round(slope, 4),
+            "age": int(age),
+            "bmi": round(bmi, 1),
+            "systolic_bp": int(systolic),
+            "diastolic_bp": int(diastolic),
+            "family_diabetes": int(family),
+            "hypertension": int(hypertension),
+        }
+
+        total_shap = sum(abs(v) for v in shap_values.values()) + 1e-10
+        normalized = {
+            k: round(abs(v) / total_shap, 4) for k, v in shap_values.items()
+        }
+
+        direction = {}
         for feat in FEATURE_NAMES:
-            values = all_shap[feat]
-            mean_abs_shap[feat] = round(
-                float(np.mean(values)) if values else 0.0, 6
-            )
-
-        # Rank features by importance
-        ranked_features = sorted(
-            mean_abs_shap.keys(), key=lambda f: mean_abs_shap[f], reverse=True
-        )
-
-        # Normalized importance
-        total = sum(mean_abs_shap.values()) + 1e-10
-        normalized_importance = {
-            f: round(mean_abs_shap[f] / total, 4) for f in FEATURE_NAMES
-        }
-
-        return {
-            "mean_abs_shap": mean_abs_shap,
-            "normalized_importance": normalized_importance,
-            "ranked_features": ranked_features,
-            "n_patients": len(patient_data_list),
-        }
+            val = feature_values.get(feat, 0)
+            if feat == "glucose_avg":
+                direction[feat] = "increases" if val > 130 else "decreases"
+            elif feat == "glucose_std":
+                direction[feat] = "increases" if val > 30 else "decreases"
+            elif feat == "glucose_trend":
+                direction[feat] = "increases" if val
