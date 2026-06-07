@@ -13,7 +13,7 @@ from app.schemas import ClinicalDataCreate, ClinicalDataResponse
 router = APIRouter(prefix="/api/clinical-data", tags=["Clinical Data"])
 
 
-@router.post("/", response_model=ClinicalDataResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClinicalDataResponse, status_code=status.HTTP_201_CREATED)
 async def create_clinical_data(
     data: ClinicalDataCreate,
     current_user: User = Depends(require_role(["admin", "nurse"])),

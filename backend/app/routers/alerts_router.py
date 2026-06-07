@@ -13,7 +13,7 @@ from app.services.alert_service import AlertService
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
 
 
-@router.get("/", response_model=list[AlertResponse])
+@router.get("", response_model=list[AlertResponse])
 async def get_all_alerts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

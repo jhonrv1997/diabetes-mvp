@@ -45,7 +45,7 @@ async def get_glucose_readings(
     return result.scalars().all()
 
 
-@router.post("/", response_model=GlucoseReadingResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=GlucoseReadingResponse, status_code=status.HTTP_201_CREATED)
 async def create_glucose_reading(
     data: GlucoseReadingCreate,
     current_user: User = Depends(require_role(["admin", "nurse"])),

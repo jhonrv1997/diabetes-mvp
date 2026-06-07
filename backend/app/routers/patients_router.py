@@ -10,7 +10,7 @@ from app.schemas import PatientCreate, PatientUpdate, PatientResponse
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
 
 
-@router.post("/", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
 async def create_patient(
     patient_data: PatientCreate,
     current_user: User = Depends(require_role(["admin", "nurse"])),
@@ -23,7 +23,7 @@ async def create_patient(
     return patient
 
 
-@router.get("/", response_model=list[PatientResponse])
+@router.get("", response_model=list[PatientResponse])
 async def list_patients(
     search: str = Query(None, description="Search by first or last name"),
     current_user: User = Depends(get_current_user),
