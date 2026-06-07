@@ -35,7 +35,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 # ── Patient schemas ───────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ class PatientResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 # ── Clinical Data schemas ─────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ class ClinicalDataResponse(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 # ── Glucose schemas ───────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ class GlucoseReadingResponse(BaseModel):
     is_synced: bool
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class GlucoseReadingSync(BaseModel):
@@ -181,7 +181,7 @@ class PredictionResponse(BaseModel):
     predicted_by: Optional[int] = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 # ── Device schemas ────────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ class DeviceResponse(BaseModel):
     battery_level: Optional[int] = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class DeviceSyncRequest(BaseModel):
@@ -234,4 +234,4 @@ class AlertResponse(BaseModel):
     dismissed_at: Optional[datetime] = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
