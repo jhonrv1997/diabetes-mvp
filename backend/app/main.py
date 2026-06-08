@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine, Base, AsyncSessionLocal
+from app.database import engine, Base, AsyncSessionLocal, run_migrations
 from app.models import User
 from app.auth import get_password_hash
 from app.routers import (
@@ -41,7 +41,8 @@ async def _create_default_admin(db: AsyncSession) -> None:
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    # Startup: create tables and default admin
+    # Startup: run migrations, create tables, and default admin
+    await run_migrations()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print("✅ Database tables created/verified.")
