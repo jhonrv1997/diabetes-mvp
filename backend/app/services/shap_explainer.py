@@ -318,4 +318,4 @@ class ShapExplainer:
             elif feat == "glucose_std":
                 direction[feat] = "increases" if val > 30 else "decreases"
             elif feat == "glucose_trend":
-                direction[feat] = "increases" if val
+               direction[feat] = "increases" if val > 0 else "decreases"
