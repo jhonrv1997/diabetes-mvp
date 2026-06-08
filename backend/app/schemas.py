@@ -169,6 +169,54 @@ class PredictionRequest(BaseModel):
     patient_id: int
 
 
+class SHAPFeatureNote(BaseModel):
+    feature: str
+    note: str
+    is_abnormal: bool = False
+    contribution_pct: float = 0.0
+    direction: str = "neutral"
+
+
+class SHAPClinicalInterpretation(BaseModel):
+    summary: str = ""
+    feature_notes: list[SHAPFeatureNote] = []
+    recommendation: str = ""
+    risk_label: str = ""
+    base_risk_pct: float = 0.0
+    predicted_risk_pct: float = 0.0
+    risk_delta_pct: float = 0.0
+
+
+class SHAPFeatureMeta(BaseModel):
+    label: str = ""
+    unit: str = ""
+    normal_low: float = 0.0
+    normal_high: float = 100.0
+
+
+class SHAPTopRiskFactor(BaseModel):
+    feature: str
+    shap_value: float = 0.0
+    value: Optional[Any] = None
+    direction: str = "neutral"
+    importance_pct: float = 0.0
+
+
+class SHAPExplanation(BaseModel):
+    """Structured SHAP explanation returned alongside predictions."""
+    shap_values: Dict[str, float] = {}
+    base_value: float = 0.0
+    prediction: float = 0.0
+    normalized_importance: Dict[str, float] = {}
+    feature_values: Dict[str, Any] = {}
+    direction: Dict[str, str] = {}
+    clinical_interpretation: Optional[SHAPClinicalInterpretation] = None
+    top_risk_factors: list[SHAPTopRiskFactor] = []
+    method_used: str = "heuristic"
+    feature_names: list[str] = []
+    feature_meta: Dict[str, SHAPFeatureMeta] = {}
+
+
 class PredictionResponse(BaseModel):
     id: int
     patient_id: int
@@ -178,6 +226,7 @@ class PredictionResponse(BaseModel):
     glucose_readings_used: int
     model_version: str
     shap_values: Optional[Dict[str, Any]] = None
+    shap_explanation: Optional[SHAPExplanation] = None
     predicted_by: Optional[int] = None
     created_at: datetime
 

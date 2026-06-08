@@ -1,3 +1,5 @@
+import json as _json
+
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, Date, Text, ForeignKey,
 )
@@ -93,11 +95,34 @@ class Prediction(Base):
     glucose_readings_used = Column(Integer, nullable=False)
     model_version = Column(String, default="1.0")
     shap_values_json = Column(Text, nullable=True)
+    shap_explanation_json = Column(Text, nullable=True)  # Full SHAP explanation
+    shap_base_value = Column(Float, nullable=True)  # SHAP base value (E[f(x)])
+    shap_method = Column(String, nullable=True)  # "shap_kernel" / "integrated_gradients" / "heuristic"
     predicted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     patient = relationship("Patient", back_populates="predictions")
     predictor = relationship("User", back_populates="predictions", foreign_keys=[predicted_by])
+
+    @property
+    def shap_values(self):
+        """Parse shap_values_json into a dict for API responses."""
+        if self.shap_values_json:
+            try:
+                return _json.loads(self.shap_values_json)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    @property
+    def shap_explanation(self):
+        """Parse shap_explanation_json into a dict for API responses."""
+        if self.shap_explanation_json:
+            try:
+                return _json.loads(self.shap_explanation_json)
+            except (ValueError, TypeError):
+                return None
+        return None
 
 
 class Device(Base):
