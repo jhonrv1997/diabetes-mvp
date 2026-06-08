@@ -212,7 +212,7 @@ export default function PatientList() {
                     >
                       Edad {sortBy === 'age' && (sortDir === 'asc' ? '↑' : '↓')}
                     </th>
-                    <th className="table-header px-4 py-3">Última Glucosa</th>
+                    <th className="table-header px-4 py-3">Riesgo Prob.</th>
                     <th
                       className="table-header px-4 py-3 cursor-pointer hover:text-gray-700"
                       onClick={() => handleSort('risk')}
@@ -237,8 +237,8 @@ export default function PatientList() {
                           {calculateAge(patient.date_of_birth)} años
                         </td>
                         <td className="table-cell text-gray-500">
-                          {latestPred?.glucose_level
-                            ? `${latestPred.glucose_level} mg/dL`
+                          {latestPred
+                            ? `${(latestPred.risk_probability * 100).toFixed(1)}%`
                             : '-'}
                         </td>
                         <td className="table-cell">

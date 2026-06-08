@@ -95,7 +95,7 @@ export default function PatientDetail() {
   if (!patient) return null
 
   const bmi = clinicalData
-    ? calculateBMI(clinicalData.weight, clinicalData.height)
+    ? calculateBMI(clinicalData.weight_kg, clinicalData.height_cm)
     : null
 
   const latestPrediction = predictions.sort(
@@ -206,13 +206,13 @@ export default function PatientDetail() {
               />
               <VitalCard
                 label="Peso"
-                value={clinicalData.weight ? `${clinicalData.weight} kg` : '-'}
+                value={clinicalData.weight_kg ? `${clinicalData.weight_kg} kg` : '-'}
                 color="text-primary-500"
               />
-              {clinicalData.height && (
+              {clinicalData.height_cm && (
                 <VitalCard
                   label="Altura"
-                  value={`${clinicalData.height} cm`}
+                  value={`${clinicalData.height_cm} cm`}
                   color="text-primary-500"
                 />
               )}
@@ -284,12 +284,6 @@ export default function PatientDetail() {
                   Probabilidad: {((latestPrediction.risk_probability || 0) * 100).toFixed(1)}%
                 </p>
               </div>
-              {latestPrediction.recommended_action && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs font-medium text-gray-600 mb-1">Acción Recomendada</p>
-                  <p className="text-xs text-gray-700">{latestPrediction.recommended_action}</p>
-                </div>
-              )}
               <p className="text-[10px] text-gray-400">
                 Fecha: {new Date(latestPrediction.created_at).toLocaleString('es-ES')}
               </p>

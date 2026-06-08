@@ -61,7 +61,7 @@ export default function Dashboard() {
   const mediumRiskCount = predictions.filter(
     (p) => p.risk_level?.toLowerCase() === 'medium' || p.risk_level?.toLowerCase() === 'medio'
   ).length
-  const activeAlertsCount = alerts.filter((a) => !a.resolved).length
+  const activeAlertsCount = alerts.filter((a) => a.is_active).length
 
   // Risk distribution chart data
   const riskDistribution = [
@@ -80,7 +80,7 @@ export default function Dashboard() {
 
   // Recent high-risk alerts (last 5)
   const recentHighAlerts = alerts
-    .filter((a) => !a.resolved && (a.risk_level?.toLowerCase() === 'high' || a.risk_level?.toLowerCase() === 'alto'))
+    .filter((a) => a.is_active && a.severity?.toLowerCase() === 'high')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 5)
 

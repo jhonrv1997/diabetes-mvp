@@ -155,10 +155,8 @@ export default function PredictionHistory() {
                         </span>
                       </td>
                       <td className="table-cell text-xs text-gray-500">
-                        {pred.clinical_data_id
-                          ? `Datos #${pred.clinical_data_id}`
-                          : pred.glucose_level
-                          ? `Glucosa: ${pred.glucose_level} mg/dL`
+                        {pred.glucose_readings_used
+                          ? `${pred.glucose_readings_used} lecturas`
                           : '-'}
                       </td>
                     </tr>

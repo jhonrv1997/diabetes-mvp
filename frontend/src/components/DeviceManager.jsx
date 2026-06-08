@@ -323,8 +323,8 @@ export default function DeviceManager() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Última Sincronización</span>
                     <span className="text-gray-700 text-xs">
-                      {device.last_sync
-                        ? new Date(device.last_sync).toLocaleString('es-ES')
+                      {device.last_sync_at
+                        ? new Date(device.last_sync_at).toLocaleString('es-ES')
                         : 'Nunca'}
                     </span>
                   </div>

@@ -25,8 +25,8 @@ export default function GlucoseChart({ readings = [] }) {
   // Format readings for chart
   const chartData = readings
     .map((reading) => ({
-      date: reading.timestamp || reading.created_at || reading.measured_at,
-      value: reading.glucose_level || reading.value || reading.glucose || 0,
+      date: reading.measurement_timestamp || reading.timestamp || reading.created_at || reading.measured_at,
+      value: reading.glucose_mg_dl || reading.glucose_level || reading.value || reading.glucose || 0,
       id: reading.id,
     }))
     .filter((d) => d.value > 0)

@@ -9,7 +9,6 @@ import {
   Filter,
   SortAsc,
   SortDesc,
-  Eye,
   Clock,
   User,
 } from 'lucide-react'
@@ -53,8 +52,8 @@ export default function AlertPanel() {
   // Filter alerts
   const filtered = alerts.filter((alert) => {
     if (riskFilter === 'all') return true
-    if (riskFilter === 'high') return alert.risk_level?.toLowerCase() === 'high' || alert.risk_level?.toLowerCase() === 'alto'
-    if (riskFilter === 'medium') return alert.risk_level?.toLowerCase() === 'medium' || alert.risk_level?.toLowerCase() === 'medio'
+    if (riskFilter === 'high') return alert.severity?.toLowerCase() === 'high'
+    if (riskFilter === 'medium') return alert.severity?.toLowerCase() === 'medium'
     return true
   })
 
@@ -66,26 +65,24 @@ export default function AlertPanel() {
       return sortDir === 'desc' ? dateB - dateA : dateA - dateB
     }
     if (sortField === 'risk') {
-      const riskOrder = { high: 3, alto: 3, medium: 2, medio: 2, low: 1, bajo: 1 }
-      const aRisk = riskOrder[a.risk_level?.toLowerCase()] || 0
-      const bRisk = riskOrder[b.risk_level?.toLowerCase()] || 0
+      const riskOrder = { high: 3, medium: 2, low: 1 }
+      const aRisk = riskOrder[a.severity?.toLowerCase()] || 0
+      const bRisk = riskOrder[b.severity?.toLowerCase()] || 0
       return sortDir === 'desc' ? bRisk - aRisk : aRisk - bRisk
     }
     return 0
   })
 
-  const activeCount = alerts.filter((a) => !a.resolved).length
+  const activeCount = alerts.filter((a) => a.is_active).length
   const highCount = alerts.filter(
-    (a) => !a.resolved && (a.risk_level?.toLowerCase() === 'high' || a.risk_level?.toLowerCase() === 'alto')
+    (a) => a.is_active && a.severity?.toLowerCase() === 'high'
   ).length
 
   const getBorderColor = (level) => {
     switch (level?.toLowerCase()) {
       case 'high':
-      case 'alto':
         return 'border-l-4 border-l-risk-high'
       case 'medium':
-      case 'medio':
         return 'border-l-4 border-l-risk-medium'
       default:
         return 'border-l-4 border-l-risk-low'
@@ -95,10 +92,8 @@ export default function AlertPanel() {
   const getBgColor = (level) => {
     switch (level?.toLowerCase()) {
       case 'high':
-      case 'alto':
         return 'bg-risk-high-light'
       case 'medium':
-      case 'medio':
         return 'bg-risk-medium-light'
       default:
         return 'bg-risk-low-light'
@@ -210,11 +205,11 @@ export default function AlertPanel() {
           {sorted.map((alert, idx) => (
             <div
               key={alert.id || idx}
-              className={`dashboard-card ${getBorderColor(alert.risk_level)} ${getBgColor(
-                alert.risk_level
+              className={`dashboard-card ${getBorderColor(alert.severity)} ${getBgColor(
+                alert.severity
               )} ${
-                (alert.risk_level?.toLowerCase() === 'high' || alert.risk_level?.toLowerCase() === 'alto') &&
-                !alert.resolved
+                alert.severity?.toLowerCase() === 'high' &&
+                alert.is_active
                   ? 'alert-pulse-high'
                   : ''
               }`}
@@ -223,7 +218,7 @@ export default function AlertPanel() {
                 <div className="flex items-start gap-3 flex-1">
                   <AlertTriangle
                     className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                      alert.risk_level?.toLowerCase() === 'high' || alert.risk_level?.toLowerCase() === 'alto'
+                      alert.severity?.toLowerCase() === 'high'
                         ? 'text-risk-high'
                         : 'text-risk-medium'
                     }`}
@@ -233,10 +228,10 @@ export default function AlertPanel() {
                       <h4 className="text-sm font-semibold text-gray-800">
                         {getPatientName(alert.patient_id)}
                       </h4>
-                      <span className={getRiskBadgeClass(alert.risk_level)}>
-                        {getRiskLabel(alert.risk_level)}
+                      <span className={getRiskBadgeClass(alert.severity)}>
+                        {getRiskLabel(alert.severity)}
                       </span>
-                      {alert.resolved && (
+                      {!alert.is_active && (
                         <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
                           Resuelta
                         </span>
@@ -245,12 +240,7 @@ export default function AlertPanel() {
                     <p className="text-xs text-gray-600 mt-1">
                       {alert.message || 'Riesgo de Diabetes detectado'}
                     </p>
-                    {alert.recommended_action && (
-                      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                        <Eye className="w-3 h-3" />
-                        {alert.recommended_action}
-                      </p>
-                    )}
+
                   </div>
                 </div>
 

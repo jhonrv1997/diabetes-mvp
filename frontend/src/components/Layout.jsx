@@ -39,7 +39,7 @@ export default function Layout() {
     try {
       const response = await api.get('/alerts')
       const activeAlerts = response.data.filter(
-        (a) => !a.resolved && a.risk_level?.toLowerCase() === 'high'
+        (a) => a.is_active && a.severity?.toLowerCase() === 'high'
       )
       setAlertCount(activeAlerts.length)
     } catch {
