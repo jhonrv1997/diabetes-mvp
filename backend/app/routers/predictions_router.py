@@ -263,3 +263,46 @@ async def predict_patient(
     db.add(prediction)
     await db.flush()
     await db.refresh(prediction)
+
+    # Create alert if risk warrants it
+    if AlertService is not None:
+        try:
+            alert_service = AlertService(db)
+            await alert_service.check_and_create_alerts(prediction)
+        except Exception as alert_exc:
+            logger.warning("Failed to create alert: %s", alert_exc)
+
+    return prediction
+
+
+@router.get("/predictions", response_model=list[PredictionResponse])
+async def list_predictions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all predictions, ordered by most recent first."""
+    result = await db.execute(
+        select(Prediction).order_by(desc(Prediction.created_at))
+    )
+    return result.scalars().all()
+
+
+@router.get("/predictions/{patient_id}", response_model=list[PredictionResponse])
+async def list_patient_predictions(
+    patient_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all predictions for a specific patient, ordered by most recent first."""
+    # Verify patient exists
+    result = await db.execute(select(Patient).where(Patient.id == patient_id))
+    patient = result.scalar_one_or_none()
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+    result = await db.execute(
+        select(Prediction)
+        .where(Prediction.patient_id == patient_id)
+        .order_by(desc(Prediction.created_at))
+    )
+    return result.scalars().all()
