@@ -130,7 +130,9 @@ export default function PredictionHistory() {
                     </th>
                     <th className="table-header px-4 py-3">Probabilidad</th>
                     <th className="table-header px-4 py-3">Nivel de Riesgo</th>
-                    <th className="table-header px-4 py-3">Lecturas Utilizadas</th>
+                    <th className="table-header px-4 py-3">Lecturas</th>
+                    <th className="table-header px-4 py-3">Método XAI</th>
+                    <th className="table-header px-4 py-3">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,8 +158,32 @@ export default function PredictionHistory() {
                       </td>
                       <td className="table-cell text-xs text-gray-500">
                         {pred.glucose_readings_used
-                          ? `${pred.glucose_readings_used} lecturas`
+                          ? `${pred.glucose_readings_used} lect.`
                           : '-'}
+                      </td>
+                      <td className="table-cell text-xs">
+                        {pred.shap_explanation?.method_used ? (
+                          <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-mono text-[10px]">
+                            {pred.shap_explanation.method_used === 'shap_kernel' ? 'SHAP' :
+                             pred.shap_explanation.method_used === 'integrated_gradients' ? 'IG' :
+                             pred.shap_explanation.method_used === 'heuristic' ? 'Heur.' :
+                             pred.shap_explanation.method_used}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="table-cell">
+                        {pred.shap_explanation ? (
+                          <button
+                            onClick={() => navigate(`/predict/${patientId}`)}
+                            className="text-xs text-primary-600 hover:text-primary-800 underline"
+                          >
+                            Ver detalle
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

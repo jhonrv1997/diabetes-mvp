@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
 import { getRiskLabel } from '../utils/validation'
+import SHAPWaterfall from './SHAPWaterfall'
 import {
   TrendingUp,
   ArrowLeft,
@@ -11,6 +12,11 @@ import {
   AlertCircle,
   Shield,
   Activity,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Heart,
+  Brain,
 } from 'lucide-react'
 import {
   BarChart,
@@ -23,6 +29,24 @@ import {
   Cell,
 } from 'recharts'
 
+// Feature name translations
+const FEATURE_TRANSLATIONS = {
+  glucose_avg: 'Glucosa promedio',
+  glucose_std: 'Variabilidad glucosa',
+  glucose_trend: 'Tendencia glucosa',
+  age: 'Edad',
+  bmi: 'IMC',
+  systolic_bp: 'Presión sistólica',
+  diastolic_bp: 'Presión diastólica',
+  family_diabetes: 'Antecedentes DM2',
+  hypertension: 'Hipertensión',
+  glucose_level: 'Glucosa',
+  weight: 'Peso',
+  height: 'Altura',
+  family_diabetes_history: 'Antecedentes DM2',
+  hypertension_history: 'Hipertensión',
+}
+
 export default function PredictionView() {
   const navigate = useNavigate()
   const { patientId } = useParams()
@@ -30,6 +54,9 @@ export default function PredictionView() {
   const [error, setError] = useState('')
   const [prediction, setPrediction] = useState(null)
   const [patient, setPatient] = useState(null)
+  const [showWaterfall, setShowWaterfall] = useState(true)
+  const [showDetailTable, setShowDetailTable] = useState(true)
+  const [showClinicalNarrative, setShowClinicalNarrative] = useState(true)
 
   useEffect(() => {
     fetchPatientAndPredict()
@@ -114,35 +141,23 @@ export default function PredictionView() {
     }
   }
 
-  // Parse SHAP features if available
-  const getShapData = () => {
-    if (!prediction?.feature_importance && !prediction?.shap_values) return []
+  // Translate feature names
+  const translateFeature = (name) => {
+    return FEATURE_TRANSLATIONS[name] || name
+  }
 
-    // Handle different API response formats
-    if (Array.isArray(prediction.feature_importance)) {
-      return prediction.feature_importance
-        .map((f) => ({
-          name: f.feature || f.name,
-          value: Math.abs(f.importance || f.value || f.shap_value || 0),
-          direction: (f.importance || f.value || f.shap_value || 0) >= 0 ? 'positive' : 'negative',
-        }))
-        .sort((a, b) => b.value - a.value)
-    }
+  // Get SHAP explanation data
+  const getShapExplanation = () => {
+    return prediction?.shap_explanation || null
+  }
 
-    if (typeof prediction.feature_importance === 'object') {
-      return Object.entries(prediction.feature_importance)
-        .map(([name, value]) => ({
-          name,
-          value: Math.abs(value),
-          direction: value >= 0 ? 'positive' : 'negative',
-        }))
-        .sort((a, b) => b.value - a.value)
-    }
-
-    if (prediction.shap_values) {
-      const shap = prediction.shap_values
-      if (typeof shap === 'object') {
-        return Object.entries(shap)
+  // Get legacy SHAP bar chart data (for simple bar chart)
+  const getShapBarData = () => {
+    const explanation = getShapExplanation()
+    if (!explanation?.shap_values) {
+      // Fallback to legacy format
+      if (prediction?.shap_values && typeof prediction.shap_values === 'object') {
+        return Object.entries(prediction.shap_values)
           .map(([name, value]) => ({
             name,
             value: Math.abs(value),
@@ -150,30 +165,31 @@ export default function PredictionView() {
           }))
           .sort((a, b) => b.value - a.value)
       }
+      return []
     }
 
-    return []
+    return Object.entries(explanation.shap_values)
+      .map(([name, value]) => ({
+        name,
+        value: Math.abs(value),
+        direction: value >= 0 ? 'positive' : 'negative',
+      }))
+      .sort((a, b) => b.value - a.value)
   }
 
-  const shapData = getShapData()
+  // Check if a feature value is outside normal range
+  const isAbnormal = (feature, value) => {
+    const explanation = getShapExplanation()
+    if (!explanation?.feature_meta?.[feature]) return false
+    const meta = explanation.feature_meta[feature]
+    if (meta.normal_low === 0 && meta.normal_high === 100) return false // Skip if no range defined
+    return value < meta.normal_low || value > meta.normal_high
+  }
+
+  const shapBarData = getShapBarData()
+  const shapExplanation = getShapExplanation()
   const riskColors = getRiskColor(prediction?.risk_level)
   const riskAction = prediction ? getRecommendedAction(prediction.risk_level) : null
-
-  // Translate feature names
-  const translateFeature = (name) => {
-    const translations = {
-      glucose_level: 'Glucosa',
-      systolic_bp: 'Presión Sistólica',
-      diastolic_bp: 'Presión Diastólica',
-      weight: 'Peso',
-      bmi: 'IMC',
-      age: 'Edad',
-      family_diabetes_history: 'Antecedentes DM2',
-      hypertension_history: 'Hipertensión',
-      height: 'Altura',
-    }
-    return translations[name] || name
-  }
 
   if (loading) {
     return (
@@ -184,7 +200,7 @@ export default function PredictionView() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
@@ -233,7 +249,7 @@ export default function PredictionView() {
       {/* Prediction result */}
       {prediction && (
         <>
-          {/* Main risk indicator */}
+          {/* ── Main risk indicator ──────────────────────────────────── */}
           <div className={`dashboard-card border-2 ${riskColors.border}`}>
             <div className="flex flex-col sm:flex-row items-center gap-6">
               {/* Risk circle */}
@@ -261,17 +277,29 @@ export default function PredictionView() {
                   <strong>{((prediction.risk_probability || 0) * 100).toFixed(1)}%</strong> de
                   probabilidad de desarrollar Diabetes Tipo 2.
                 </p>
+                {shapExplanation?.base_value != null && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Valor base poblacional: <strong>{(shapExplanation.base_value * 100).toFixed(1)}%</strong>
+                    {' '}→ Los factores del paciente{' '}
+                    {shapExplanation.prediction > shapExplanation.base_value ? 'aumentan' : 'reducen'}{' '}
+                    el riesgo en{' '}
+                    <strong>{Math.abs((shapExplanation.prediction - shapExplanation.base_value) * 100).toFixed(1)} pp</strong>
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 mt-2">
                   Fecha de predicción:{' '}
                   {prediction.created_at
                     ? new Date(prediction.created_at).toLocaleString('es-ES')
                     : new Date().toLocaleString('es-ES')}
+                  {shapExplanation?.method_used && (
+                    <> · Método XAI: <span className="font-mono text-xs">{shapExplanation.method_used}</span></>
+                  )}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Recommended action */}
+          {/* ── Recommended action ───────────────────────────────────── */}
           {riskAction && (
             <div className={`dashboard-card border ${riskColors.border}`}>
               <div className="flex items-start gap-3">
@@ -291,19 +319,119 @@ export default function PredictionView() {
             </div>
           )}
 
-          {/* SHAP feature importance chart */}
-          {shapData.length > 0 && (
+          {/* ── Clinical Interpretation Narrative ────────────────────── */}
+          {shapExplanation?.clinical_interpretation && (
+            <div className="dashboard-card">
+              <button
+                onClick={() => setShowClinicalNarrative(!showClinicalNarrative)}
+                className="w-full flex items-center justify-between"
+              >
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-indigo-500" />
+                  Interpretación Clínica
+                </h3>
+                {showClinicalNarrative ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+
+              {showClinicalNarrative && (
+                <div className="mt-4 space-y-4">
+                  {/* Summary */}
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
+                    <p className="text-sm text-gray-800 leading-relaxed">
+                      {shapExplanation.clinical_interpretation.summary}
+                    </p>
+                  </div>
+
+                  {/* Per-feature notes */}
+                  {shapExplanation.clinical_interpretation.feature_notes?.length > 0 && (
+                    <div className="space-y-2">
+                      {shapExplanation.clinical_interpretation.feature_notes.map((note, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex items-start gap-2 p-3 rounded-lg border ${
+                            note.is_abnormal
+                              ? 'bg-red-50 border-red-200'
+                              : 'bg-gray-50 border-gray-100'
+                          }`}
+                        >
+                          <div
+                            className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                              note.direction === 'aumenta' ? 'bg-red-500' : 'bg-green-500'
+                            }`}
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm text-gray-700">{note.note}</p>
+                          </div>
+                          <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                            {note.contribution_pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recommendation */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+                    <div className="flex items-start gap-2">
+                      <Heart className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-sm text-gray-800 leading-relaxed">
+                        {shapExplanation.clinical_interpretation.recommendation}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── SHAP Waterfall Chart ─────────────────────────────────── */}
+          {shapExplanation && (
+            <div className="dashboard-card">
+              <button
+                onClick={() => setShowWaterfall(!showWaterfall)}
+                className="w-full flex items-center justify-between"
+              >
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary-500" />
+                  Explicación de Factores (SHAP Waterfall)
+                </h3>
+                {showWaterfall ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+              {showWaterfall && (
+                <div className="mt-4">
+                  <p className="text-xs text-gray-500 mb-3">
+                    Este gráfico muestra cómo cada factor empuja la predicción desde el valor base
+                    poblacional hasta la predicción final. Las barras rojas aumentan el riesgo,
+                    las verdes lo reducen.
+                  </p>
+                  <SHAPWaterfall explanation={shapExplanation} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── SHAP Feature Importance Bar Chart ────────────────────── */}
+          {shapBarData.length > 0 && (
             <div className="dashboard-card">
               <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary-500" />
-                Factores de Influencia (SHAP)
+                <TrendingUp className="w-4 h-4 text-primary-500" />
+                Importancia de Factores (SHAP)
               </h3>
               <p className="text-xs text-gray-500 mb-4">
-                Los siguientes factores contribuyen más a la predicción del riesgo:
+                Los siguientes factores contribuyen más a la predicción del riesgo,
+                ordenados por magnitud de impacto:
               </p>
-              <ResponsiveContainer width="100%" height={shapData.length * 40 + 40}>
+              <ResponsiveContainer width="100%" height={shapBarData.length * 40 + 40}>
                 <BarChart
-                  data={shapData.slice(0, 8)}
+                  data={shapBarData.slice(0, 9)}
                   layout="vertical"
                   margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                 >
@@ -313,21 +441,21 @@ export default function PredictionView() {
                     dataKey="name"
                     type="category"
                     tick={{ fontSize: 11 }}
-                    width={120}
+                    width={140}
                     tickFormatter={translateFeature}
                   />
                   <Tooltip
-                    formatter={(value, name) => [value.toFixed(4), 'Importancia']}
+                    formatter={(value, name) => [value.toFixed(4), 'Importancia SHAP']}
                     labelFormatter={translateFeature}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
-                    {shapData.slice(0, 8).map((entry, index) => (
+                    {shapBarData.slice(0, 9).map((entry, index) => (
                       <Cell
                         key={index}
                         fill={
                           entry.direction === 'positive'
-                            ? '#8e4f49'
-                            : '#47805a'
+                            ? '#ef4444'
+                            : '#22c55e'
                         }
                       />
                     ))}
@@ -336,18 +464,167 @@ export default function PredictionView() {
               </ResponsiveContainer>
               <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
                 <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded bg-risk-high" />
+                  <div className="w-3 h-3 rounded bg-red-500" />
                   <span>Incrementa riesgo</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded bg-risk-low" />
+                  <div className="w-3 h-3 rounded bg-green-500" />
                   <span>Reduce riesgo</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Quick actions */}
+          {/* ── Feature Detail Table ─────────────────────────────────── */}
+          {shapExplanation?.shap_values && (
+            <div className="dashboard-card">
+              <button
+                onClick={() => setShowDetailTable(!showDetailTable)}
+                className="w-full flex items-center justify-between"
+              >
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-primary-500" />
+                  Detalle de Factores por Paciente
+                </h3>
+                {showDetailTable ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+
+              {showDetailTable && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-3 text-gray-600 font-medium">Factor</th>
+                        <th className="text-right py-2 px-3 text-gray-600 font-medium">Valor</th>
+                        <th className="text-right py-2 px-3 text-gray-600 font-medium">Rango Normal</th>
+                        <th className="text-right py-2 px-3 text-gray-600 font-medium">SHAP</th>
+                        <th className="text-right py-2 px-3 text-gray-600 font-medium">Impacto</th>
+                        <th className="text-center py-2 px-3 text-gray-600 font-medium">Dirección</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shapExplanation.top_risk_factors?.map((factor, idx) => {
+                        const meta = shapExplanation.feature_meta?.[factor.feature] || {}
+                        const isAbn = isAbnormal(factor.feature, factor.value)
+                        return (
+                          <tr
+                            key={idx}
+                            className={`border-b border-gray-100 ${isAbn ? 'bg-red-50/50' : ''}`}
+                          >
+                            <td className="py-2 px-3">
+                              <span className="font-medium text-gray-800">
+                                {meta.label || translateFeature(factor.feature)}
+                              </span>
+                              {isAbn && (
+                                <span className="ml-1 text-xs text-red-500 font-medium">
+                                  ⚠
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right text-gray-700">
+                              {factor.value !== null && factor.value !== undefined
+                                ? `${factor.value}${meta.unit ? ' ' + meta.unit : ''}`
+                                : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right text-gray-500 text-xs">
+                              {meta.normal_low != null && meta.normal_high != null
+                                ? `${meta.normal_low} – ${meta.normal_high} ${meta.unit || ''}`
+                                : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-xs">
+                              <span className={factor.shap_value >= 0 ? 'text-red-600' : 'text-green-600'}>
+                                {factor.shap_value >= 0 ? '+' : ''}{factor.shap_value.toFixed(4)}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right text-gray-600">
+                              {factor.importance_pct.toFixed(1)}%
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  factor.direction === 'increases'
+                                    ? 'bg-red-100 text-red-700'
+                                    : factor.direction === 'decreases'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                {factor.direction === 'increases'
+                                  ? '↑ Riesgo'
+                                  : factor.direction === 'decreases'
+                                  ? '↓ Riesgo'
+                                  : '— Neutral'}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    {shapExplanation.base_value != null && (
+                      <tfoot>
+                        <tr className="border-t-2 border-gray-300">
+                          <td className="py-2 px-3 font-semibold text-gray-700" colSpan={3}>
+                            Valor base (E[f])
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-xs" colSpan={3}>
+                            {(shapExplanation.base_value * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3 font-semibold text-indigo-700" colSpan={3}>
+                            Predicción final
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-xs font-bold text-indigo-700" colSpan={3}>
+                            {(shapExplanation.prediction * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Method Info ──────────────────────────────────────────── */}
+          {shapExplanation?.method_used && (
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-gray-600">
+                  <p className="font-medium mb-1">Sobre el método de explicación</p>
+                  {shapExplanation.method_used === 'shap_kernel' && (
+                    <p>
+                      Se utilizó <strong>SHAP KernelExplainer</strong>, un método modelo-agnóstico
+                      que calcula la contribución exacta de cada factor según la teoría de valores
+                      de Shapley. Esto garantiza que la suma de todas las contribuciones más el
+                      valor base iguala la predicción del modelo.
+                    </p>
+                  )}
+                  {shapExplanation.method_used === 'integrated_gradients' && (
+                    <p>
+                      Se utilizó <strong>Integrated Gradients</strong>, un método basado en gradientes
+                      que calcula la contribución de cada factor integrando los gradientes del modelo
+                      desde un valor base hasta la entrada actual.
+                    </p>
+                  )}
+                  {shapExplanation.method_used === 'heuristic' && (
+                    <p>
+                      Se utilizó un <strong>método heurístico</strong> basado en umbrales clínicos,
+                      ya que el modelo de ML no está disponible. Las contribuciones son aproximaciones
+                      basadas en rangos clínicos conocidos.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Quick actions ────────────────────────────────────────── */}
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => navigate(`/patients/${patientId}`)}
