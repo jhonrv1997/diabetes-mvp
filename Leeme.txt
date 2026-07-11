@@ -10,3 +10,11 @@ chmod +x start.sh
 Frontend: http://localhost:5173
 Backend: http://localhost:8000
 API Docs: http://localhost:8000/docs
+----------------------------------------
+Ventana 1 (Backend):
+ cd D:\diabetes-mvp\backend
+ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+Ventana 2 (Frontend):
+ cd D:\diabetes-mvp\frontend
+ npm run dev
