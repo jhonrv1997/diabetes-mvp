@@ -13,25 +13,43 @@ import {
   X,
   Activity,
   ChevronRight,
+  Apple,
+  Calendar,
+  BellRing,
 } from 'lucide-react'
 
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/patients', label: 'Pacientes', icon: Users },
-  { to: '/clinical-data', label: 'Datos Clínicos', icon: ClipboardList },
-  { to: '/devices', label: 'Dispositivos', icon: Bluetooth },
-  { to: '/alerts', label: 'Alertas', icon: Bell },
-]
+// Build the navigation items based on user role
+function buildNavItems(role) {
+  const items = [
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'nurse', 'nutritionist'] },
+    { to: '/patients', label: 'Pacientes', icon: Users, roles: ['admin', 'nurse', 'nutritionist'] },
+    { to: '/clinical-data', label: 'Datos Clínicos', icon: ClipboardList, roles: ['admin', 'nurse'] },
+    { to: '/devices', label: 'Dispositivos', icon: Bluetooth, roles: ['admin', 'nurse'] },
+    // Epic 04 — Sprint 03
+    { to: '/nutrition', label: 'Nutrición', icon: Apple, roles: ['admin', 'nutritionist', 'nurse'] },
+    { to: '/appointments', label: 'Citas', icon: Calendar, roles: ['admin', 'nurse'] },
+    { to: '/alerts', label: 'Alertas', icon: Bell, roles: ['admin', 'nurse'] },
+    { to: '/notifications', label: 'Notificaciones', icon: BellRing, roles: ['admin', 'nurse', 'nutritionist'] },
+  ]
+  return items.filter((item) => item.roles.includes(role))
+}
 
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [alertCount, setAlertCount] = useState(0)
+  const [notifCount, setNotifCount] = useState(0)
+
+  const navItems = buildNavItems(user?.role || 'nurse')
 
   useEffect(() => {
     fetchAlertCount()
-    const interval = setInterval(fetchAlertCount, 60000)
+    fetchNotifCount()
+    const interval = setInterval(() => {
+      fetchAlertCount()
+      fetchNotifCount()
+    }, 60000)
     return () => clearInterval(interval)
   }, [])
 
@@ -44,6 +62,15 @@ export default function Layout() {
       setAlertCount(activeAlerts.length)
     } catch {
       // Silently ignore alert count errors
+    }
+  }
+
+  const fetchNotifCount = async () => {
+    try {
+      const r = await api.get('/notifications', { params: { unread_only: true, limit: 50 } })
+      setNotifCount(Array.isArray(r.data) ? r.data.length : 0)
+    } catch {
+      // ignore
     }
   }
 
@@ -86,6 +113,13 @@ export default function Layout() {
             </button>
           </div>
 
+          {/* Role badge */}
+          <div className="px-3 py-2 border-b border-gray-100">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary-50 text-primary-700">
+              {user?.role === 'admin' ? '👑 Administrador' : user?.role === 'nutritionist' ? '🍎 Nutricionista' : '👩‍⚕️ Enfermera'}
+            </span>
+          </div>
+
           {/* Navigation */}
           <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
@@ -108,6 +142,11 @@ export default function Layout() {
                     {alertCount}
                   </span>
                 )}
+                {item.label === 'Notificaciones' && notifCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-[10px] font-bold">
+                    {notifCount}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -117,15 +156,15 @@ export default function Layout() {
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
                 <span className="text-xs font-semibold text-primary-600">
-                  {user?.first_name?.[0] || user?.username?.[0] || 'U'}
+                  {user?.full_name?.[0] || user?.username?.[0] || 'U'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">
-                  {user?.first_name || user?.username || 'Usuario'}
+                  {user?.full_name || user?.username || 'Usuario'}
                 </p>
                 <p className="text-[10px] text-gray-500 truncate">
-                  {user?.email || ''}
+                  @{user?.username || ''}
                 </p>
               </div>
               <button
@@ -161,8 +200,21 @@ export default function Layout() {
 
           <div className="ml-auto flex items-center gap-3">
             <NavLink
+              to="/notifications"
+              className="relative text-gray-400 hover:text-gray-600 transition-colors"
+              title="Notificaciones push"
+            >
+              <BellRing className="w-5 h-5" />
+              {notifCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {notifCount > 9 ? '9+' : notifCount}
+                </span>
+              )}
+            </NavLink>
+            <NavLink
               to="/alerts"
               className="relative text-gray-400 hover:text-gray-600 transition-colors"
+              title="Alertas clínicas"
             >
               <Bell className="w-5 h-5" />
               {alertCount > 0 && (
