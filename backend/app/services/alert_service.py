@@ -17,6 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Alert, Prediction, Patient
 from app.schemas import AlertResponse
 
+# Epic 04 — HU06: notificaciones push prioritarias
+try:
+    from app.services.notification_service import NotificationService
+    _NOTIF_AVAILABLE = True
+except ImportError:
+    _NOTIF_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,6 +108,20 @@ class AlertService:
 
         # Get patient name for response
         patient_name = await self._get_patient_name(prediction.patient_id)
+
+        # Epic 04 — HU06: enviar notificación push prioritaria cuando la
+        # alerta es de severidad alta (riesgo Alto). Mensaje canónico:
+        # "Alerta de Salud: Acuda a emergencia"
+        if _NOTIF_AVAILABLE and severity == "high":
+            try:
+                notif_service = NotificationService(self.db)
+                await notif_service.send_emergency_alert(
+                    patient_id=prediction.patient_id,
+                    glucose_mg_dl=0.0,  # alert triggered by prediction, not a reading
+                    custom_message="Alerta de Salud: Acuda a emergencia",
+                )
+            except Exception as notif_exc:
+                logger.warning("Failed to send emergency push notification: %s", notif_exc)
 
         logger.info(
             "Created %s alert for patient %d (risk=%.2f%%)",
