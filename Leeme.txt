@@ -1,6 +1,7 @@
 Credenciales por defecto
 Admin: admin / admin123
 Enfermera: enfermera / enfermera123
+Nutricionista: nutricionista / nutricionista123  [Epic 04 - Sprint 03]
 -------------------------------------
 Para ejecutar
 cd diabetes-mvp
@@ -18,3 +19,90 @@ Ventana 1 (Backend):
 Ventana 2 (Frontend):
  cd D:\diabetes-mvp\frontend
  npm run dev
+
+================================================================
+EPIC 04 — MONITOREO Y SEGUIMIENTO (Sprint 03)
+================================================================
+Implementa las Historias de Usuario:
+  • HU06 Recepción de alertas tempranas (notificaciones push)
+  • HU10 Seguimiento nutricional personalizado
+  • HU13 Programación de citas de seguimiento
+
+Nuevas rutas disponibles en el frontend:
+  /notifications   — Panel de notificaciones push (HU06/HU10/HU13)
+  /nutrition       — Panel de planes nutricionales (HU10)
+  /appointments    — Calendario de citas de seguimiento (HU13)
+
+Nuevos endpoints API:
+  POST   /api/notifications/token               (registrar token push)
+  GET    /api/notifications                     (lista global)
+  GET    /api/notifications/{patient_id}        (lista por paciente)
+  PUT    /api/notifications/{id}/read           (marcar leída)
+  POST   /api/notifications/emergency-alert     (forzar alerta emergencia)
+
+  POST   /api/nutrition/plans                   (crear plan - nutricionista)
+  GET    /api/nutrition/plans                    (listar planes)
+  GET    /api/nutrition/plans/{id}               (obtener plan)
+  PUT    /api/nutrition/plans/{id}               (actualizar plan)
+  GET    /api/nutrition/patients/{id}/active-plan
+  GET    /api/nutrition/plans/{id}/adherence     (HU10 Esc. 2)
+
+  POST   /api/appointments                      (crear cita - enfermera)
+  GET    /api/appointments                      (listar)
+  GET    /api/appointments/calendar              (calendario centro de salud)
+  GET    /api/appointments/{id}                  (obtener)
+  PUT    /api/appointments/{id}                  (actualizar)
+  POST   /api/appointments/{id}/mark-no-show    (HU13 Esc. 2 - reagendar)
+
+Nuevos modelos en la base de datos:
+  notification_tokens    — tokens push de los pacientes
+  push_notifications      — historial de notificaciones enviadas
+  nutrition_plans        — planes nutricionales
+  appointments           — citas de seguimiento
+
+Archivo de pruebas end-to-end:
+  python3 /home/z/my-project/scripts/test_epic04_inline.py
+
+================================================================
+FLUJOS IMPLEMENTADOS
+================================================================
+
+HU06 — Recepción de alertas tempranas (Paciente):
+  • Cuando el sistema detecta glucosa >= 250 mg/dL (o un patrón peligroso),
+    se dispara automáticamente la notificación push con:
+      title:    "Alerta de Salud"
+      body:     "Alerta de Salud: Acuda a emergencia"
+      priority: "high"
+      sound:    "critical"
+  • El detector de anomalías se invoca en:
+      POST /api/glucose (tras cada lectura manual)
+      POST /api/notifications/emergency-alert (endpoint manual)
+  • También se dispara cuando AlertService crea una alerta de severidad high.
+
+HU10 — Seguimiento nutricional (Nutricionista):
+  Escenario 1 — Creación de plan:
+    • Solo pacientes con riesgo Medio o Alto (verificado con la última predicción).
+    • Solo el nutricionista o admin pueden crear planes (rol "nutritionist").
+    • El plan se vincula al perfil del paciente (1 plan activo a la vez).
+    • Se programan notificaciones push de recordatorio de comidas
+      en la app móvil del paciente, una por cada slot del meal_schedule.
+
+  Escenario 2 — Evaluación de adherencia (tras 14 días):
+    • El sistema cruza los datos de glucosa del sensor IoT con el plan asignado.
+    • Calcula el % de mediciones en rango objetivo (70-180 mg/dL).
+    • Si han pasado < 14 días, retorna "aún no evaluable".
+    • Si adherencia < 60%, genera recomendación de ajuste.
+
+HU13 — Programación de citas (Enfermera):
+  Escenario 1 — Cita automática por riesgo Alto:
+    • Tras cada predicción con riesgo Alto (o Medio), el sistema crea
+      automáticamente una cita dentro de los 7 días siguientes (10:00 AM).
+    • Se notifica al paciente vía push (appointment_reminder).
+    • La cita aparece en GET /api/appointments/calendar.
+
+  Escenario 2 — Reagendamiento por inasistencia:
+    • POST /api/appointments/{id}/mark-no-show:
+        - marca la cita original como "no_show",
+        - crea una nueva cita en los próximos 3 días (reason="rescheduled_no_show"),
+        - incrementa el contador no_show_count del paciente,
+        - envía 2 notificaciones push (recordatorio + reagendamiento).
