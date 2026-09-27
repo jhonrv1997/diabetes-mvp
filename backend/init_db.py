@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sqlalchemy import select, delete
 
 from app.database import engine, Base, AsyncSessionLocal
-from app.models import User, Patient, ClinicalData, GlucoseReading, Prediction, Alert
+from app.models import User, Patient, ClinicalData, GlucoseReading, Prediction, Alert, NotificationToken
 from app.auth import get_password_hash
 
 logging.basicConfig(
@@ -299,11 +299,23 @@ async def init_database():
         )
         session.add(nurse_user)
 
+        # Epic 04 — Sprint 03: nutricionista por defecto (HU10)
+        nutritionist_user = User(
+            username="nutricionista",
+            hashed_password=get_password_hash("nutricionista123"),
+            full_name="Nutricionista Laura Pérez",
+            role="nutritionist",
+            is_active=True,
+        )
+        session.add(nutritionist_user)
+
         await session.flush()
         admin_id = admin_user.id
         nurse_id = nurse_user.id
+        nutritionist_id = nutritionist_user.id
         logger.info("✅ Admin user created (id=%d, username=admin)", admin_id)
         logger.info("✅ Nurse user created (id=%d, username=enfermera)", nurse_id)
+        logger.info("✅ Nutritionist user created (id=%d, username=nutricionista)", nutritionist_id)
 
         # ── 3-5. Insert patients, clinical data, glucose readings ───────
         logger.info("")
@@ -381,6 +393,16 @@ async def init_database():
                 avg_glucose,
             )
 
+            # Epic 04 — Sprint 03: token de notificación push simulado
+            # (cada paciente tiene su app móvil registrada)
+            sample_token = NotificationToken(
+                patient_id=patient_id,
+                token=f"fcm-sample-token-patient-{patient_id:04d}-android",
+                platform="android",
+                is_active=True,
+            )
+            session.add(sample_token)
+
         await session.flush()
 
         # ── Summary ─────────────────────────────────────────────────────
@@ -400,8 +422,9 @@ async def init_database():
         logger.info("  Clinical data:   %d", len(clinical_count))
         logger.info("  Glucose readings: %d", len(glucose_count))
         logger.info("")
-        logger.info("  Default admin:   username=admin,       password=admin123")
-        logger.info("  Default nurse:   username=enfermera,   password=enfermera123")
+        logger.info("  Default admin:        username=admin,         password=admin123")
+        logger.info("  Default nurse:        username=enfermera,      password=enfermera123")
+        logger.info("  Default nutritionist: username=nutricionista, password=nutricionista123")
         logger.info("")
 
         # Print patient risk profiles
