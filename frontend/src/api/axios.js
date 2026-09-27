@@ -46,6 +46,13 @@ api.interceptors.response.use(
           error.message = detail
         }
       }
+
+      // El proxy de Vite devuelve 5xx cuando el backend NO está corriendo.
+      // Traducirlo a un mensaje claro y accionable para el usuario.
+      if (status >= 500) {
+        error.message =
+          'No se pudo conectar con el servidor (backend). Verifique que la API esté corriendo en el puerto 8000.'
+      }
     } else if (error.request) {
       error.message = 'No se pudo conectar con el servidor. Verifique su conexión.'
     }
