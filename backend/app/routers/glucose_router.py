@@ -9,6 +9,16 @@ from app.database import get_db
 from app.models import User, Patient, GlucoseReading
 from app.schemas import GlucoseReadingCreate, GlucoseReadingResponse
 
+# Epic 04 — HU06: detección de anomalías graves en tiempo real
+try:
+    from app.services.glucose_anomaly_detector import GlucoseAnomalyDetector
+    _ANOMALY_DETECTOR_AVAILABLE = True
+except ImportError:
+    _ANOMALY_DETECTOR_AVAILABLE = False
+
+import logging
+_logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/glucose", tags=["Glucose Readings"])
 
 
@@ -69,6 +79,17 @@ async def create_glucose_reading(
     db.add(reading)
     await db.flush()
     await db.refresh(reading)
+
+    # ── Epic 04, HU06: detectar anomalía grave en tiempo real ──────────────
+    # Tras registrar la lectura, evaluamos si corresponde disparar la alerta
+    # push prioritaria "Alerta de Salud: Acuda a emergencia".
+    if _ANOMALY_DETECTOR_AVAILABLE:
+        try:
+            detector = GlucoseAnomalyDetector(db)
+            await detector.check_reading(reading)
+        except Exception as exc:
+            _logger.warning("Anomaly detector failed for reading %d: %s", reading.id, exc)
+
     return reading
 
 

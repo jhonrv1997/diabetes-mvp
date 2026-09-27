@@ -37,6 +37,13 @@ try:
 except ImportError:
     AlertService = None
 
+# Epic 04 — HU13: citas automáticas por riesgo Alto
+try:
+    from app.services.appointment_service import AppointmentService
+    _APPOINTMENT_SERVICE_AVAILABLE = True
+except ImportError:
+    _APPOINTMENT_SERVICE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Predictions"])
@@ -277,6 +284,23 @@ async def predict_patient(
             await alert_service.check_and_create_alerts(prediction)
         except Exception as alert_exc:
             logger.warning("Failed to create alert: %s", alert_exc)
+
+    # ── Epic 04, HU13 Escenario 1: cita automática por riesgo Alto ─────────
+    # Tras generar la predicción, si el riesgo es Alto, el sistema crea
+    # automáticamente una cita de seguimiento dentro de los 7 días siguientes,
+    # notifica al paciente por la app móvil y la muestra en el calendario del
+    # Centro de Salud. También cubrimos riesgo Medio dentro de 14 días.
+    if _APPOINTMENT_SERVICE_AVAILABLE and risk_level in ("high", "medium"):
+        try:
+            appointment_service = AppointmentService(db)
+            await appointment_service.auto_create_appointment_for_risk(
+                patient_id=patient_id,
+                risk_level=risk_level,
+                prediction_id=prediction.id,
+                nurse_id=current_user.id,
+            )
+        except Exception as appt_exc:
+            logger.warning("Failed to auto-create appointment: %s", appt_exc)
 
     # ── Build response with full SHAP explanation ────────────────────────
     response_data = {
