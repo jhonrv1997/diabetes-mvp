@@ -12,6 +12,10 @@ import PredictionView from './components/PredictionView'
 import PredictionHistory from './components/PredictionHistory'
 import AlertPanel from './components/AlertPanel'
 import DeviceManager from './components/DeviceManager'
+// Epic 04 — Sprint 03: Nuevos módulos
+import NotificationsPanel from './components/NotificationsPanel'
+import NutritionPanel from './components/NutritionPanel'
+import AppointmentsPanel from './components/AppointmentsPanel'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
@@ -55,6 +59,10 @@ export default function App() {
         <Route path="history/:patientId" element={<PredictionHistory />} />
         <Route path="devices" element={<DeviceManager />} />
         <Route path="alerts" element={<AlertPanel />} />
+        {/* Epic 04 — Sprint 03 */}
+        <Route path="notifications" element={<NotificationsPanel />} />
+        <Route path="nutrition" element={<NutritionPanel />} />
+        <Route path="appointments" element={<AppointmentsPanel />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
