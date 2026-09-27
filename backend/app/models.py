@@ -16,7 +16,7 @@ class User(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
-    role = Column(String, nullable=False, default="nurse")  # "admin" or "nurse"
+    role = Column(String, nullable=False, default="nurse")  # "admin" / "nurse" / "nutritionist"
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -159,3 +159,117 @@ class Alert(Base):
     prediction = relationship("Prediction", foreign_keys=[prediction_id])
     patient = relationship("Patient", foreign_keys=[patient_id])
     dismisser = relationship("User", foreign_keys=[dismissed_by])
+
+
+# ── Epic 04 — Monitoreo y seguimiento (Sprint 03) ────────────────────────────
+# HU06: Recepción de alertas tempranas (notificaciones push)
+# HU10: Seguimiento nutricional personalizado
+# HU13: Programación de citas de seguimiento
+
+
+class NotificationToken(Base):
+    """Token de dispositivo móvil del paciente para enviar notificaciones push."""
+    __tablename__ = "notification_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String, nullable=False, index=True)  # FCM / APNs token
+    platform = Column(String, default="android")  # "android" / "ios" / "web"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    patient = relationship("Patient", foreign_keys=[patient_id])
+
+
+class PushNotification(Base):
+    """Registro de notificaciones push enviadas al paciente."""
+    __tablename__ = "push_notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True)
+    notification_type = Column(String, nullable=False)
+    # "emergency_alert" / "meal_reminder" / "appointment_reminder" / "appointment_reschedule"
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    priority = Column(String, default="normal")  # "normal" / "high"
+    sound = Column(String, default="default")  # "default" / "critical" / "silent"
+    is_sent = Column(Boolean, default=False)
+    sent_at = Column(DateTime, nullable=True)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    payload_json = Column(Text, nullable=True)  # extra data
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    patient = relationship("Patient", foreign_keys=[patient_id])
+
+    @property
+    def payload(self):
+        if self.payload_json:
+            try:
+                return _json.loads(self.payload_json)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+
+class NutritionPlan(Base):
+    """Plan nutricional personalizado asignado a un paciente en riesgo."""
+    __tablename__ = "nutrition_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True)
+    nutritionist_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    daily_calories = Column(Float, nullable=False)
+    protein_g = Column(Float, nullable=True)        # gramos de proteína / día
+    carbs_g = Column(Float, nullable=True)          # gramos de carbohidratos / día
+    fat_g = Column(Float, nullable=True)             # gramos de grasa / día
+    restrictions_json = Column(Text, nullable=True)  # JSON array: ["diabetes","hipertension","vegetariana", ...]
+    meal_schedule_json = Column(Text, nullable=True) # JSON: { "desayuno":"08:00", "almuerzo":"13:00", ... }
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    start_date = Column(DateTime, default=datetime.utcnow)
+    end_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    patient = relationship("Patient", foreign_keys=[patient_id])
+    nutritionist = relationship("User", foreign_keys=[nutritionist_id])
+
+    @property
+    def restrictions(self):
+        if self.restrictions_json:
+            try:
+                return _json.loads(self.restrictions_json)
+            except (ValueError, TypeError):
+                return []
+        return []
+
+    @property
+    def meal_schedule(self):
+        if self.meal_schedule_json:
+            try:
+                return _json.loads(self.meal_schedule_json)
+            except (ValueError, TypeError):
+                return {}
+        return {}
+
+
+class Appointment(Base):
+    """Cita de seguimiento programada para un paciente en riesgo."""
+    __tablename__ = "appointments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True)
+    nurse_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    scheduled_date = Column(DateTime, nullable=False, index=True)
+    status = Column(String, default="scheduled")
+    # "scheduled" / "completed" / "no_show" / "rescheduled" / "cancelled"
+    reason = Column(String, nullable=True)  # "risk_high_auto" / "risk_medium_auto" / "manual" / "rescheduled_no_show"
+    auto_generated = Column(Boolean, default=False)
+    no_show_count = Column(Integer, default=0)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    patient = relationship("Patient", foreign_keys=[patient_id])
+    nurse = relationship("User", foreign_keys=[nurse_id])

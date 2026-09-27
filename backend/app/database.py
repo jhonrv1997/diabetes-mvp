@@ -48,6 +48,9 @@ _MIGRATIONS = {
         "shap_base_value": "FLOAT DEFAULT NULL",
         "shap_method": "VARCHAR DEFAULT NULL",
     },
+    # Epic 04 — Sprint 03: los pacientes existentes podrían no tener un token
+    # de notificación. La tabla nueva `notification_tokens` se crea vía
+    # `create_all()`, pero añadimos una migración para futuras columnas.
 }
 
 
