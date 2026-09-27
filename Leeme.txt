@@ -18,8 +18,7 @@ Ventana 1 (Backend):
 
 Ventana 2 (Frontend):
  cd D:\diabetes-mvp\frontend
- npm run dev
-
+ npm.cmd run dev
 ================================================================
 EPIC 04 — MONITOREO Y SEGUIMIENTO (Sprint 03)
 ================================================================
