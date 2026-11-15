@@ -172,22 +172,6 @@ export default function NotificationsPanel() {
         </div>
       </div>
 
-      {/* Info banner — HU06 */}
-      <div className="dashboard-card bg-blue-50 border-blue-200">
-        <div className="flex items-start gap-3">
-          <Smartphone className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-blue-800">
-            <p className="font-semibold mb-1">Sistema de notificaciones push a la app móvil del paciente</p>
-            <p className="text-xs text-blue-700">
-              Esta vista centraliza todas las notificaciones push enviadas a los pacientes:
-              alertas de emergencia por glucosa peligrosamente alta (HU06), recordatorios de
-              comidas del plan nutricional (HU10) y recordatorios/reagendamientos de citas (HU13).
-              Las notificaciones de emergencia se envían con prioridad <code className="bg-blue-100 px-1 rounded">high</code>{' '}
-              y sonido <code className="bg-blue-100 px-1 rounded">critical</code>.
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">

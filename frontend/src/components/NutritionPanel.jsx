@@ -200,22 +200,6 @@ export default function NutritionPanel() {
         </div>
       </div>
 
-      {/* HU10 explanation banner */}
-      <div className="dashboard-card bg-amber-50 border-amber-200">
-        <div className="flex items-start gap-3">
-          <UtensilsCrossed className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-amber-800">
-            <p className="font-semibold mb-1">HU10 · Seguimiento Nutricional Personalizado</p>
-            <p className="text-xs text-amber-700">
-              Registra planes alimentarios para pacientes con riesgo Medio o Alto, integrados con
-              los datos de glucosa y actividad física del sistema IoT. Tras 14 días, el sistema
-              cruza los datos de glucosa del sensor con el plan asignado y calcula el porcentaje
-              de adherencia. Si la adherencia es menor al 60%, se muestra una recomendación de ajuste.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Create form */}
       {showForm && (
         <div className="dashboard-card border-2 border-primary-200">
