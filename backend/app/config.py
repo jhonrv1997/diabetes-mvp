@@ -4,6 +4,9 @@ from typing import List
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./diabetes_mvp.db"
+    # Epic 05 — HU12: BD dedicada del registro de auditoría (independiente
+    # de la operacional para evitar bloqueos de SQLite y aislar el trail)
+    AUDIT_DATABASE_URL: str = "sqlite+aiosqlite:///./audit_logs.db"
     SECRET_KEY: str = "mvp-dev-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480

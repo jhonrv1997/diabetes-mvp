@@ -24,7 +24,27 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6)
     full_name: str
-    role: Literal["admin", "nurse", "nutritionist"]
+    # Epic 05 — HU12: roles del Centro de Salud
+    role: Literal["admin", "doctor", "nurse", "nutritionist", "health_manager"]
+
+
+class UserUpdate(BaseModel):
+    """Actualización de un usuario existente (HU12 Escenario 1).
+
+    El administrador puede cambiar el rol, activar/desactivar la cuenta,
+    corregir el nombre o restablecer la contraseña.
+    """
+    full_name: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=6)
+    role: Optional[Literal["admin", "doctor", "nurse", "nutritionist", "health_manager"]] = None
+    is_active: Optional[bool] = None
+
+
+class RolePermissions(BaseModel):
+    """Permisos asociados a un rol (se asignan automáticamente al crear la cuenta)."""
+    role: str
+    label: str
+    modules: list[str] = []
 
 
 class UserResponse(BaseModel):
@@ -435,3 +455,115 @@ class MarkNoShowResponse(BaseModel):
     rescheduled_appointment: Optional[AppointmentResponse] = None
     notifications_sent: int = 0
     message: str
+
+
+# ── Epic 05 — Sprint 04 schemas ─────────────────────────────────────────────────
+# HU07: Dashboard de monitoreo poblacional
+# HU11: Reportes para autoridades de salud (DIRESA)
+# HU12: Auditoría de accesos
+
+
+# ── HU12: Auditoría ───────────────────────────────────────────────────────────────
+class AuditLogResponse(BaseModel):
+    """Entrada del registro de auditoría: fecha, hora, usuario y acción."""
+    id: int
+    created_at: datetime
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    user_role: Optional[str] = None
+    patient_id: Optional[int] = None
+    patient_name: Optional[str] = None
+    action: str
+    resource: Optional[str] = None
+    method: Optional[str] = None
+    endpoint: Optional[str] = None
+    status_code: Optional[int] = None
+    details: Optional[str] = None
+
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
+
+
+class AuditLogListResponse(BaseModel):
+    total: int
+    items: list[AuditLogResponse] = []
+
+
+# ── HU07 / HU11: Reportes ──────────────────────────────────────────────────────
+class RiskDistributionItem(BaseModel):
+    level: str            # "low" / "medium" / "high"
+    label: str            # "Bajo" / "Medio" / "Alto"
+    count: int
+    pct: float            # 0-100
+
+
+class AgeGroupDistributionItem(BaseModel):
+    group: str            # "18-29", "30-44", ...
+    total: int
+    low: int = 0
+    medium: int = 0
+    high: int = 0
+
+
+class GenderDistributionItem(BaseModel):
+    gender: str           # "M" / "F"
+    label: str            # "Masculino" / "Femenino"
+    count: int
+
+
+class PatientAtRiskItem(BaseModel):
+    """Paciente en riesgo (última predicción Medio o Alto en el período)."""
+    patient_id: int
+    full_name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    risk_level: str
+    risk_probability: float
+    last_prediction_date: datetime
+
+
+class ReportPeriod(BaseModel):
+    date_from: date
+    date_to: date
+    label: str
+
+
+class PopulationSummary(BaseModel):
+    """Resumen estadístico poblacional (HU07): consumo del gráfico de torta
+    y de la lista de pacientes en riesgo exportable a PDF."""
+    period: ReportPeriod
+    total_patients: int
+    evaluated_patients: int          # con ≥ 1 predicción en el período
+    total_predictions: int
+    new_patients_in_period: int
+    risk_distribution: list[RiskDistributionItem] = []
+    age_distribution: list[AgeGroupDistributionItem] = []
+    gender_distribution: list[GenderDistributionItem] = []
+    avg_risk_probability: Optional[float] = None
+    patients_at_risk: list[PatientAtRiskItem] = []      # Medio o Alto
+    critical_patients: list[PatientAtRiskItem] = []     # solo Alto
+    generated_at: datetime
+    generation_seconds: float
+
+
+class MonthlyReportIndicator(BaseModel):
+    """Indicadores clave del reporte mensual para la DIRESA (HU11 Escenario 1)."""
+    patients_evaluated: int
+    total_predictions: int
+    risk_distribution: list[RiskDistributionItem] = []
+    accuracy_rate: Optional[float] = None        # 0-100, tasa de aciertos
+    accuracy_basis: str = ""                     # cómo se calculó la tasa
+    critical_patients_count: int
+    avg_risk_probability: Optional[float] = None
+
+
+class MonthlyReport(BaseModel):
+    """Reporte mensual de prevención de diabetes para autoridades (HU11)."""
+    title: str
+    addressed_to: str = "DIRESA"
+    period: ReportPeriod
+    filters_applied: Dict[str, Any] = {}
+    indicators: MonthlyReportIndicator
+    age_distribution: list[AgeGroupDistributionItem] = []
+    critical_patients: list[PatientAtRiskItem] = []
+    generated_at: datetime
+    generation_seconds: float

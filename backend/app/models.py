@@ -16,7 +16,10 @@ class User(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
-    role = Column(String, nullable=False, default="nurse")  # "admin" / "nurse" / "nutritionist"
+    role = Column(String, nullable=False, default="nurse")
+    # "admin" / "doctor" / "nurse" / "nutritionist" / "health_manager"
+    # Epic 05 — Sprint 04 (HU12): médico (predicciones e historial),
+    # health_manager = Jefe del Centro de Salud (reportes poblacionales HU07/HU11)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -254,6 +257,12 @@ class NutritionPlan(Base):
         return {}
 
 
+# ── Epic 05 — Sprint 04: Reportes y cumplimiento ─────────────────────────────
+# HU07: Dashboard de Monitoreo Poblacional (Jefe del Centro de Salud)
+# HU11: Reportes para autoridades de salud (DIRESA)
+# HU12: Control de acceso y privacidad de datos (auditoría)
+
+
 class Appointment(Base):
     """Cita de seguimiento programada para un paciente en riesgo."""
     __tablename__ = "appointments"
@@ -273,3 +282,7 @@ class Appointment(Base):
 
     patient = relationship("Patient", foreign_keys=[patient_id])
     nurse = relationship("User", foreign_keys=[nurse_id])
+
+
+# NOTA (Epic 05 — HU12): el modelo AuditLog vive en app/audit_models.py con
+# su propia base de datos (audit_logs.db), separada de la operacional.
