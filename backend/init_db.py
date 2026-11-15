@@ -30,7 +30,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sqlalchemy import select, delete
 
 from app.database import engine, Base, AsyncSessionLocal
+from app.audit_database import audit_engine, AuditBase, AuditSessionLocal
 from app.models import User, Patient, ClinicalData, GlucoseReading, Prediction, Alert, NotificationToken
+from app.audit_models import AuditLog
 from app.auth import get_password_hash
 
 logging.basicConfig(
@@ -72,6 +74,7 @@ SAMPLE_PATIENTS = [
         "glucose_baseline": 165,
         "glucose_std": 40,
         "glucose_trend": 0.5,
+        "sample_risk": (0.78, 0.82),
     },
     {
         "first_name": "Carlos",
@@ -98,6 +101,7 @@ SAMPLE_PATIENTS = [
         "glucose_baseline": 125,
         "glucose_std": 25,
         "glucose_trend": 0.2,
+        "sample_risk": (0.52, 0.58),
     },
     {
         "first_name": "Rosa",
@@ -124,6 +128,7 @@ SAMPLE_PATIENTS = [
         "glucose_baseline": 88,
         "glucose_std": 8,
         "glucose_trend": -0.02,
+        "sample_risk": (0.15, 0.18),
     },
     {
         "first_name": "Roberto",
@@ -150,6 +155,7 @@ SAMPLE_PATIENTS = [
         "glucose_baseline": 185,
         "glucose_std": 45,
         "glucose_trend": 0.6,
+        "sample_risk": (0.85, 0.89),
     },
     {
         "first_name": "Lucía",
@@ -176,6 +182,7 @@ SAMPLE_PATIENTS = [
         "glucose_baseline": 92,
         "glucose_std": 12,
         "glucose_trend": 0.03,
+        "sample_risk": (0.21, 0.24),
     },
 ]
 
@@ -272,6 +279,10 @@ async def init_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    # Epic 05 — HU12: reinicia también la BD de auditoría
+    async with audit_engine.begin() as conn:
+        await conn.run_sync(AuditBase.metadata.drop_all)
+        await conn.run_sync(AuditBase.metadata.create_all)
     logger.info("✅ All tables created successfully.")
 
     async with AsyncSessionLocal() as session:
@@ -309,13 +320,36 @@ async def init_database():
         )
         session.add(nutritionist_user)
 
+        # Epic 05 — Sprint 04: jefe del centro (HU07/HU11) y médico (HU12)
+        health_manager_user = User(
+            username="jefe",
+            hashed_password=get_password_hash("jefe123"),
+            full_name="Dr. Ricardo Mendoza — Jefe del Centro de Salud",
+            role="health_manager",
+            is_active=True,
+        )
+        session.add(health_manager_user)
+
+        doctor_user = User(
+            username="medico",
+            hashed_password=get_password_hash("medico123"),
+            full_name="Dr. Alberto Ramírez — Médico Endocrinólogo",
+            role="doctor",
+            is_active=True,
+        )
+        session.add(doctor_user)
+
         await session.flush()
         admin_id = admin_user.id
         nurse_id = nurse_user.id
         nutritionist_id = nutritionist_user.id
+        health_manager_id = health_manager_user.id
+        doctor_id = doctor_user.id
         logger.info("✅ Admin user created (id=%d, username=admin)", admin_id)
         logger.info("✅ Nurse user created (id=%d, username=enfermera)", nurse_id)
         logger.info("✅ Nutritionist user created (id=%d, username=nutricionista)", nutritionist_id)
+        logger.info("✅ Health manager user created (id=%d, username=jefe)", health_manager_id)
+        logger.info("✅ Doctor user created (id=%d, username=medico)", doctor_id)
 
         # ── 3-5. Insert patients, clinical data, glucose readings ───────
         logger.info("")
@@ -403,7 +437,53 @@ async def init_database():
             )
             session.add(sample_token)
 
+            # Epic 05 — Sprint 04: predicciones de muestra para que los
+            # reportes poblacionales (HU07) y mensuales (HU11) tengan datos
+            # desde el primer arranque. Dos predicciones por paciente a lo
+            # largo de la ventana de 30 días.
+            for offset_days, prob in (
+                (25, patient_data["sample_risk"][0]),
+                (5, patient_data["sample_risk"][1]),
+            ):
+                if prob >= 0.7:
+                    level = "high"
+                elif prob >= 0.4:
+                    level = "medium"
+                else:
+                    level = "low"
+                session.add(
+                    Prediction(
+                        patient_id=patient_id,
+                        risk_probability=prob,
+                        risk_level=level,
+                        confidence=None,  # modo heurístico
+                        glucose_readings_used=90,
+                        model_version="heuristic-1.0",
+                        shap_method="heuristic",
+                        predicted_by=nurse_id,
+                        created_at=datetime.utcnow() - timedelta(days=offset_days),
+                    )
+                )
+
         await session.flush()
+
+        # ── Epic 05 — Sprint 04: registros de auditoría de muestra (HU12) ──
+        # Entradas realistas para que el módulo de auditoría tenga historial
+        # desde el primer arranque (el middleware seguirá registrando cada
+        # acceso real a partir de ahora).
+        now = datetime.utcnow()
+        sample_audit = [
+            (nurse_id, "enfermera", "nurse", 1, "consulta", "pacientes", "GET", "/api/patients/1", 200, now - timedelta(days=3, hours=2)),
+            (nurse_id, "enfermera", "nurse", 1, "consulta", "glucosa", "GET", "/api/glucose/1", 200, now - timedelta(days=3, hours=1)),
+            (doctor_id, "medico", "doctor", 1, "consulta", "predicciones", "GET", "/api/predictions/1", 200, now - timedelta(days=2, hours=5)),
+            (doctor_id, "medico", "doctor", 4, "consulta", "predicciones", "GET", "/api/predictions/4", 200, now - timedelta(days=2, hours=4)),
+            (nurse_id, "enfermera", "nurse", 4, "creacion", "glucosa", "POST", "/api/glucose", 201, now - timedelta(days=1, hours=8)),
+            (nutritionist_id, "nutricionista", "nutritionist", 1, "consulta", "nutricion", "GET", "/api/nutrition/patients/1/active-plan", 200, now - timedelta(days=1, hours=3)),
+            (admin_id, "admin", "admin", None, "exportacion", "reportes", "GET", "/api/reports/population-summary/pdf", 200, now - timedelta(hours=26)),
+            (admin_id, "admin", "admin", None, "exportacion", "reportes", "GET", "/api/reports/monthly/pdf", 200, now - timedelta(hours=25)),
+            (nurse_id, "enfermera", "nurse", 2, "edicion", "pacientes", "PUT", "/api/patients/2", 200, now - timedelta(hours=20)),
+            (doctor_id, "medico", "doctor", 4, "consulta", "pacientes", "GET", "/api/patients/4", 200, now - timedelta(hours=6)),
+        ]
 
         # ── Summary ─────────────────────────────────────────────────────
         logger.info("")
@@ -416,15 +496,46 @@ async def init_database():
         patients_count = (await session.execute(select(Patient))).scalars().all()
         clinical_count = (await session.execute(select(ClinicalData))).scalars().all()
         glucose_count = (await session.execute(select(GlucoseReading))).scalars().all()
+        predictions_count = (await session.execute(select(Prediction))).scalars().all()
 
-        logger.info("  Users:           %d", len(users_count))
-        logger.info("  Patients:        %d", len(patients_count))
-        logger.info("  Clinical data:   %d", len(clinical_count))
+        # Epic 05 — HU12: siembra y conteo en la BD de auditoría dedicada
+        action_label = {
+            "consulta": "Consulta", "creacion": "Creación",
+            "edicion": "Edición", "exportacion": "Exportación",
+        }
+        async with AuditSessionLocal() as audit_session:
+            for uid, uname, urole, pid, action, resource, method, endpoint, code, ts in sample_audit:
+                audit_session.add(
+                    AuditLog(
+                        user_id=uid,
+                        username=uname,
+                        user_role=urole,
+                        patient_id=pid,
+                        action=action,
+                        resource=resource,
+                        method=method,
+                        endpoint=endpoint,
+                        status_code=code,
+                        ip_address="127.0.0.1",
+                        details=f"{action_label.get(action, action)} de {resource} ({method} {endpoint})",
+                        created_at=ts,
+                    )
+                )
+            await audit_session.commit()
+            audit_count = (await audit_session.execute(select(AuditLog))).scalars().all()
+
+        logger.info("  Users:            %d", len(users_count))
+        logger.info("  Patients:         %d", len(patients_count))
+        logger.info("  Clinical data:    %d", len(clinical_count))
         logger.info("  Glucose readings: %d", len(glucose_count))
+        logger.info("  Predictions:      %d", len(predictions_count))
+        logger.info("  Audit logs:       %d", len(audit_count))
         logger.info("")
-        logger.info("  Default admin:        username=admin,         password=admin123")
-        logger.info("  Default nurse:        username=enfermera,      password=enfermera123")
-        logger.info("  Default nutritionist: username=nutricionista, password=nutricionista123")
+        logger.info("  Default admin:          username=admin,         password=admin123")
+        logger.info("  Default nurse:          username=enfermera,      password=enfermera123")
+        logger.info("  Default nutritionist:   username=nutricionista, password=nutricionista123")
+        logger.info("  Default health manager: username=jefe,          password=jefe123")
+        logger.info("  Default doctor:         username=medico,        password=medico123")
         logger.info("")
 
         # Print patient risk profiles
