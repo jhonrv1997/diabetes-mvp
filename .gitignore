@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Bases de datos locales
+backend/diabetes_mvp.db
+backend/diabetes_mvp.db-*
+backend/audit_logs.db
+backend/audit_logs.db-*
+backend/audit_logs.db-wal
+backend/audit_logs.db-shm
+
+# Modelo entrenado (regenerable con train_model.py)
+backend/model/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Logs y sistema
+*.log
+.DS_Store
+Thumbs.db
+
+# Entornos
+.env

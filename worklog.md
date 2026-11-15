@@ -44,3 +44,71 @@ Stage Summary:
   prevención de citas duplicadas, acumulación de no_show_count.
 - Código documentado en español (mensajes) e inglés (logs técnicos), siguiendo
   el estilo del repositorio original.
+
+---
+
+Task ID: epic05-sprint04
+Agent: Main agent (GLM)
+Task: Implementar Epic 05 — Reportes, control de acceso y auditoría - Sprint 04
+       HU07  Dashboard de Monitoreo Poblacional (Jefe del Centro de Salud)
+       HU11  Generación de Reportes para Autoridades de Salud (DIRESA)
+       HU12  Control de Acceso y Privacidad de Datos (roles + auditoría)
+
+Work Log:
+- Análisis del repositorio clonado (FastAPI + React/Vite + SQLite + ML/SHAP)
+- Backend: BD de auditoría DEDICADA (audit_logs.db, modo WAL) con modelo
+  AuditLog desnormalizado (app/audit_models.py + app/audit_database.py);
+  separada de la operacional para evitar bloqueos de SQLite entre la
+  transacción del endpoint y la escritura del middleware.
+- Backend: middleware de auditoría (app/audit_middleware.py) que registra
+  automáticamente cada acceso a datos de pacientes: fecha, hora, usuario
+  (desde el JWT, ahora con "uid"), acción (consulta/creación/edición/
+  eliminación/exportación), recurso y estado. Filtra rutas ruidosas.
+- Backend: 2 roles nuevos — "health_manager" (Jefe del Centro de Salud) y
+  "doctor" (Médico); UserCreate/UserUpdate ampliado + matriz de permisos
+  documental en users_router.
+- Backend: users_router (CRUD de personal, cambio de rol, activar/desactivar,
+  restablecer contraseña, protección de auto-degradación).
+- Backend: report_service (resumen poblacional + reporte mensual con filtros
+  de edad/fechas, distribución por riesgo, grupos etarios, tasa de aciertos
+  con base documentada) y pdf_report_builder (ReportLab: KPIs, gráfico de
+  torta, barras por grupo etario, tablas, logotipo, área de firma DIRESA).
+- Backend: reports_router con 4 endpoints (JSON + PDF) restringidos a
+  admin/health_manager; audit_router con logs por paciente, filtros y
+  exportación CSV (BOM UTF-8 para Excel).
+- Backend: control de acceso aplicado en routers existentes según HU12
+  (nutricionista SOLO nutrición; médico → predicciones/historial/alertas;
+  enfermera → triaje; jefe → reportes; auditoría y usuarios → admin).
+- Backend: init_db.py con jefe/medico por defecto, predicciones de muestra
+  (para que los reportes tengan datos al primer arranque) y 10 entradas
+  de auditoría sembradas en la BD dedicada.
+- Backend: main.py registra 3 routers nuevos + middleware + init de la BD
+  de auditoría; requirements.txt añade reportlab y pillow.
+- Backend: logo institucional generado (assets/logo_centro_salud.png).
+- Frontend: ReportsPanel (pestañas HU07/HU11: filtros de fechas y edad,
+  gráficos de torta/barras con recharts, KPIs, tablas, descarga de PDFs
+  vía blob con Authorization Bearer).
+- Frontend: UsersPanel (tabla de personal, cambio de rol inline, alta de
+  cuentas, matriz de permisos visual) y AuditPanel (selector de paciente,
+  filtro por acción, tabla cronológica, exportación CSV).
+- Frontend: App.jsx con RoleRoute (rutas protegidas por rol + redirect por
+  rol), HomeRedirect (nutricionista → /nutrition) y ErrorBoundary global.
+- Frontend: Layout.jsx con navegación por rol (5 roles), badges, sondeos
+  condicionales; Login.jsx con cuentas de demostración; Dashboard.jsx
+  oculta "Nuevo Paciente" a roles sin permiso.
+- Frontend: utils/download.js para descargas autenticadas (PDF/CSV).
+- Fix: import BarChart faltante en ReportsPanel (detectado con navegador
+  headless + ErrorBoundary).
+- Pruebas: scripts/test_epic05_inline.py — 67 verificaciones E2E, TODAS PASAN
+  (HU07 resumen+torta+PDF, HU11 indicadores+filtros 40-60+<10s+PDF,
+  HU12 roles/matriz/403s/auditoría/CSV, regresión de flujos previos).
+- UI verificada end-to-end con navegador headless: login de los 5 roles,
+  navegación restringida, generación de reportes, exportaciones.
+
+Stage Summary:
+- 3 Historias de Usuario implementadas y verificadas end-to-end (67 checks).
+- Usuarios: admin/admin123, jefe/jefe123, medico/medico123,
+  enfermera/enfermera123, nutricionista/nutricionista123.
+- BD de auditoría separada (audit_logs.db) — patrón audit trail append-only.
+- Los PDF incluyen logotipo, gráfico de torta (HU07) y barras etarias (HU11).
+- Frontend compila (vite build OK) y probado en navegador real.

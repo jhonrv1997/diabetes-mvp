@@ -2,6 +2,8 @@ Credenciales por defecto
 Admin: admin / admin123
 Enfermera: enfermera / enfermera123
 Nutricionista: nutricionista / nutricionista123  [Epic 04 - Sprint 03]
+Jefe del Centro de Salud: jefe / jefe123  [Epic 05 - Sprint 04]
+Médico: medico / medico123  [Epic 05 - Sprint 04]
 -------------------------------------
 Para ejecutar
 cd diabetes-mvp
@@ -105,3 +107,68 @@ HU13 — Programación de citas (Enfermera):
         - crea una nueva cita en los próximos 3 días (reason="rescheduled_no_show"),
         - incrementa el contador no_show_count del paciente,
         - envía 2 notificaciones push (recordatorio + reagendamiento).
+
+================================================================
+EPIC 05 — REPORTES, CONTROL DE ACCESO Y AUDITORÍA (Sprint 04)
+================================================================
+Implementa las Historias de Usuario:
+  • HU07  Dashboard de Monitoreo Poblacional (Jefe del Centro de Salud)
+  • HU11  Generación de Reportes para Autoridades de Salud (DIRESA)
+  • HU12  Control de Acceso y Privacidad de Datos
+
+Nuevas rutas disponibles en el frontend:
+  /reports        — Módulo de reportes (solo Jefe del Centro y Admin):
+                     · pestaña "Monitoreo Poblacional" (HU07): gráfico de
+                       torta por nivel de riesgo, análisis etario, lista de
+                       pacientes en riesgo y exportación a PDF.
+                     · pestaña "Reportes DIRESA" (HU11): reporte mensual con
+                       indicadores clave, filtros de edad/fechas, gráficos de
+                       barras, tablas resumen y PDF con logotipo.
+  /users          — Gestión de usuarios y roles (solo Admin, HU12 Esc. 1)
+  /audit          — Auditoría de accesos por paciente (solo Admin, HU12 Esc. 2)
+
+Nuevos endpoints API:
+  GET  /api/reports/population-summary            (resumen poblacional HU07)
+  GET  /api/reports/population-summary/pdf        (exporta lista en PDF)
+  GET  /api/reports/monthly                       (reporte mensual HU11)
+  GET  /api/reports/monthly/pdf                   (PDF DIRESA con logotipo)
+       Filtros: year, month, date_from, date_to, age_min, age_max
+
+  GET  /api/users                                 (listar personal)
+  POST /api/users                                 (registrar cuenta con rol)
+  PUT  /api/users/{id}                            (cambiar rol/estado/clave)
+  GET  /api/users/permissions                     (matriz de permisos por rol)
+
+  GET  /api/audit                                 (registro global con filtros)
+  GET  /api/audit/patient/{id}                    (log cronológico del paciente)
+  GET  /api/audit/patient/{id}/export/csv         (exportar log en CSV)
+  GET  /api/audit/export/csv                      (exportar log global)
+
+Nueva base de datos:
+  audit_logs.db — registro de auditoría SEPARADO de diabetes_mvp.db
+  (append-only, modo WAL). El middleware app/audit_middleware.py registra
+  automáticamente cada consulta/creación/edición/eliminación/exportación
+  sobre datos de pacientes, con fecha, hora, usuario y acción.
+
+Matriz de permisos por rol (HU12 Escenario 1):
+  Administrador ........ todo el sistema
+  Jefe del Centro ...... Dashboard, pacientes (lectura), reportes HU07/HU11
+  Médico ............... Dashboard, pacientes, predicciones e historial, alertas
+  Enfermera ............ Dashboard, pacientes, triaje (datos clínicos y
+                         glucosa IoT), dispositivos, citas, alertas
+  Nutricionista ........ SOLO planes alimentarios (+ lista de pacientes)
+
+Archivo de pruebas end-to-end (67 verificaciones):
+  cd backend
+  rm -f diabetes_mvp.db audit_logs.db*
+  python3 init_db.py
+  python3 ../scripts/test_epic05_inline.py
+
+Notas técnicas:
+  • La "tasa de predicciones acertadas" (HU11) usa la confianza promedio
+    del modelo ML; en modo heurístico se estima por completitud de los
+    datos IoT usados (se documenta la base en el propio reporte).
+  • Los PDF se generan con ReportLab e incluyen el logotipo del Centro de
+    Salud (backend/app/assets/logo_centro_salud.png).
+  • El JWT ahora incluye "uid" para que la auditoría identifique al
+    usuario sin consultar la BD operacional.
