@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
+from app.auth import require_role
 from app.database import get_db
 from app.models import User, Patient, Prediction, Alert
 from app.schemas import AlertResponse
@@ -12,10 +12,13 @@ from app.services.alert_service import AlertService
 
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
 
+# Epic 05 — HU12: las alertas clínicas corresponden a médico/enfermera/jefe/admin
+_ALERT_READ_ROLES = ["admin", "nurse", "doctor", "health_manager"]
+
 
 @router.get("", response_model=list[AlertResponse])
 async def get_all_alerts(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(_ALERT_READ_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all active alerts, ordered by creation date (most recent first)."""
@@ -26,7 +29,7 @@ async def get_all_alerts(
 @router.get("/{patient_id}", response_model=list[AlertResponse])
 async def get_patient_alerts(
     patient_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(_ALERT_READ_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all alerts for a specific patient."""
@@ -43,7 +46,7 @@ async def get_patient_alerts(
 @router.put("/{alert_id}/dismiss", response_model=AlertResponse)
 async def dismiss_alert(
     alert_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Dismiss an active alert."""

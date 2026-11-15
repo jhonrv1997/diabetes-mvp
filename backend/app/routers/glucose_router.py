@@ -27,7 +27,8 @@ async def get_glucose_readings(
     patient_id: int,
     start_date: datetime = Query(None, description="Start date filter"),
     end_date: datetime = Query(None, description="End date filter"),
-    current_user: User = Depends(get_current_user),
+    # Epic 05 — HU12: lecturas IoT visibles para médico/jefe; no para nutricionista
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor", "health_manager"])),
     db: AsyncSession = Depends(get_db),
 ):
     # Verify patient exists

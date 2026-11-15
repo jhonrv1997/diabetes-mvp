@@ -100,7 +100,8 @@ async def create_nutrition_plan(
 async def list_nutrition_plans(
     patient_id: int | None = None,
     active_only: bool = False,
-    current_user: User = Depends(get_current_user),
+    # Epic 05 — HU12: los planes alimentarios son del nutricionista (y admin)
+    current_user: User = Depends(require_role(["admin", "nutritionist"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Lista planes nutricionales (opcionalmente por paciente o solo activos)."""
@@ -112,7 +113,7 @@ async def list_nutrition_plans(
 @router.get("/plans/{plan_id}", response_model=NutritionPlanResponse)
 async def get_nutrition_plan(
     plan_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["admin", "nutritionist"])),
     db: AsyncSession = Depends(get_db),
 ):
     plan = await service_get_plan(db, plan_id)
@@ -129,7 +130,7 @@ async def service_get_plan(db: AsyncSession, plan_id: int):
 @router.get("/patients/{patient_id}/active-plan", response_model=NutritionPlanResponse | None)
 async def get_patient_active_plan(
     patient_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["admin", "nutritionist"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Devuelve el plan nutricional activo del paciente, si existe."""
@@ -163,7 +164,7 @@ async def update_nutrition_plan(
 @router.get("/plans/{plan_id}/adherence", response_model=NutritionAdherenceResponse)
 async def evaluate_plan_adherence(
     plan_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["admin", "nutritionist"])),
     db: AsyncSession = Depends(get_db),
 ):
     """

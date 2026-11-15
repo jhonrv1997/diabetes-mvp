@@ -56,7 +56,8 @@ async def list_notifications(
     patient_id: Optional[int] = Query(None, description="Filtrar por paciente"),
     unread_only: bool = Query(False, description="Solo no leídas"),
     limit: int = Query(100, ge=1, le=500),
-    current_user: User = Depends(get_current_user),
+    # Epic 05 — HU12: notificaciones visibles para el personal clínico
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Lista el historial de notificaciones push enviadas."""
@@ -72,7 +73,7 @@ async def list_patient_notifications(
     patient_id: int,
     unread_only: bool = Query(False),
     limit: int = Query(100, ge=1, le=500),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Lista las notificaciones push de un paciente específico."""

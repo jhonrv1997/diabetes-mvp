@@ -101,7 +101,8 @@ def _get_explainer(model):
 @router.post("/predict/{patient_id}", response_model=PredictionResponse)
 async def predict_patient(
     patient_id: int,
-    current_user: User = Depends(require_role(["admin", "nurse"])),
+    # Epic 05 — HU12: el médico también genera predicciones
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor"])),
     db: AsyncSession = Depends(get_db),
     shap_method: str = Query(
         "auto",
@@ -363,7 +364,8 @@ async def explain_prediction(
 
 @router.get("/predictions", response_model=list[PredictionResponse])
 async def list_predictions(
-    current_user: User = Depends(get_current_user),
+    # Epic 05 — HU12: predicciones e historial → médico/enfermera/jefe/admin
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor", "health_manager"])),
     db: AsyncSession = Depends(get_db),
 ):
     """List all predictions, ordered by most recent first."""
@@ -376,7 +378,8 @@ async def list_predictions(
 @router.get("/predictions/{patient_id}", response_model=list[PredictionResponse])
 async def list_patient_predictions(
     patient_id: int,
-    current_user: User = Depends(get_current_user),
+    # Epic 05 — HU12: el nutricionista no accede a predicciones
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor", "health_manager"])),
     db: AsyncSession = Depends(get_db),
 ):
     """List all predictions for a specific patient, ordered by most recent first."""

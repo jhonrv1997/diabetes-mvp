@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user, require_role
+from app.auth import require_role
 from app.config import settings
 from app.database import get_db
 from app.models import User, Patient, ClinicalData
@@ -46,7 +46,9 @@ async def create_clinical_data(
 @router.get("/{patient_id}", response_model=ClinicalDataResponse)
 async def get_latest_clinical_data(
     patient_id: int,
-    current_user: User = Depends(get_current_user),
+    # Epic 05 — HU12: el triaje corresponde a enfermería; el médico puede
+    # consultarlo como parte del historial, la nutricionista no.
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor"])),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -67,7 +69,7 @@ async def get_latest_clinical_data(
 @router.get("/{patient_id}/history", response_model=list[ClinicalDataResponse])
 async def get_clinical_data_history(
     patient_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["admin", "nurse", "doctor"])),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

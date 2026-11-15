@@ -43,7 +43,9 @@ async def login(
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username, "role": user.role},
+        # Epic 05 — HU12: "uid" permite a la auditoría identificar al usuario
+        # sin consultar la BD principal desde el middleware.
+        data={"sub": user.username, "role": user.role, "uid": user.id},
         expires_delta=access_token_expires,
     )
 
