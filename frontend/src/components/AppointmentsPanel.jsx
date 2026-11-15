@@ -214,22 +214,6 @@ export default function AppointmentsPanel() {
         </div>
       </div>
 
-      {/* HU13 explanation banner */}
-      <div className="dashboard-card bg-blue-50 border-blue-200">
-        <div className="flex items-start gap-3">
-          <CalendarClock className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-blue-800">
-            <p className="font-semibold mb-1">HU13 · Programación de citas de seguimiento</p>
-            <p className="text-xs text-blue-700">
-              El sistema crea automáticamente una cita dentro de los 7 días siguientes cuando
-              clasifica a un paciente con riesgo Alto. Si el paciente no asiste, se marca la
-              inasistencia, se notifica al paciente y se genera automáticamente una nueva cita
-              en los próximos 3 días. El indicador de inasistencia se acumula para seguimiento prioritario.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="dashboard-card p-3 text-center">

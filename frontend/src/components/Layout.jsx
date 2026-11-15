@@ -16,22 +16,38 @@ import {
   Apple,
   Calendar,
   BellRing,
+  BarChart3,
+  UserCog,
+  FileSearch,
 } from 'lucide-react'
 
-// Build the navigation items based on user role
+// Build the navigation items based on user role (Epic 05 — HU12:
+// cada profesional solo ve los módulos de su función)
 function buildNavItems(role) {
   const items = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'nurse', 'nutritionist'] },
-    { to: '/patients', label: 'Pacientes', icon: Users, roles: ['admin', 'nurse', 'nutritionist'] },
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'nurse', 'doctor', 'health_manager'] },
+    { to: '/patients', label: 'Pacientes', icon: Users, roles: ['admin', 'nurse', 'doctor', 'nutritionist', 'health_manager'] },
     { to: '/clinical-data', label: 'Datos Clínicos', icon: ClipboardList, roles: ['admin', 'nurse'] },
     { to: '/devices', label: 'Dispositivos', icon: Bluetooth, roles: ['admin', 'nurse'] },
     // Epic 04 — Sprint 03
-    { to: '/nutrition', label: 'Nutrición', icon: Apple, roles: ['admin', 'nutritionist', 'nurse'] },
+    { to: '/nutrition', label: 'Nutrición', icon: Apple, roles: ['admin', 'nutritionist'] },
     { to: '/appointments', label: 'Citas', icon: Calendar, roles: ['admin', 'nurse'] },
-    { to: '/alerts', label: 'Alertas', icon: Bell, roles: ['admin', 'nurse'] },
-    { to: '/notifications', label: 'Notificaciones', icon: BellRing, roles: ['admin', 'nurse', 'nutritionist'] },
+    { to: '/alerts', label: 'Alertas', icon: Bell, roles: ['admin', 'nurse', 'doctor'] },
+    { to: '/notifications', label: 'Notificaciones', icon: BellRing, roles: ['admin', 'nurse', 'doctor'] },
+    // Epic 05 — Sprint 04 (HU07/HU11/HU12)
+    { to: '/reports', label: 'Reportes', icon: BarChart3, roles: ['admin', 'health_manager'] },
+    { to: '/users', label: 'Usuarios', icon: UserCog, roles: ['admin'] },
+    { to: '/audit', label: 'Auditoría', icon: FileSearch, roles: ['admin'] },
   ]
   return items.filter((item) => item.roles.includes(role))
+}
+
+const ROLE_BADGES = {
+  admin: '👑 Administrador',
+  nutritionist: '🍎 Nutricionista',
+  nurse: '👩‍⚕️ Enfermera',
+  doctor: '🩺 Médico',
+  health_manager: '🏥 Jefe del Centro de Salud',
 }
 
 export default function Layout() {
@@ -41,17 +57,22 @@ export default function Layout() {
   const [alertCount, setAlertCount] = useState(0)
   const [notifCount, setNotifCount] = useState(0)
 
-  const navItems = buildNavItems(user?.role || 'nurse')
+  const role = user?.role || 'nurse'
+  const navItems = buildNavItems(role)
+
+  // Epic 05 — HU12: los sondeos solo se hacen para roles con permiso
+  const canPollAlerts = ['admin', 'nurse', 'doctor', 'health_manager'].includes(role)
+  const canPollNotifs = ['admin', 'nurse', 'doctor'].includes(role)
 
   useEffect(() => {
-    fetchAlertCount()
-    fetchNotifCount()
+    if (canPollAlerts) fetchAlertCount()
+    if (canPollNotifs) fetchNotifCount()
     const interval = setInterval(() => {
-      fetchAlertCount()
-      fetchNotifCount()
+      if (canPollAlerts) fetchAlertCount()
+      if (canPollNotifs) fetchNotifCount()
     }, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [canPollAlerts, canPollNotifs])
 
   const fetchAlertCount = async () => {
     try {
@@ -116,7 +137,7 @@ export default function Layout() {
           {/* Role badge */}
           <div className="px-3 py-2 border-b border-gray-100">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary-50 text-primary-700">
-              {user?.role === 'admin' ? '👑 Administrador' : user?.role === 'nutritionist' ? '🍎 Nutricionista' : '👩‍⚕️ Enfermera'}
+              {ROLE_BADGES[role] || role}
             </span>
           </div>
 
@@ -199,30 +220,34 @@ export default function Layout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <NavLink
-              to="/notifications"
-              className="relative text-gray-400 hover:text-gray-600 transition-colors"
-              title="Notificaciones push"
-            >
-              <BellRing className="w-5 h-5" />
-              {notifCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] font-bold flex items-center justify-center">
-                  {notifCount > 9 ? '9+' : notifCount}
-                </span>
-              )}
-            </NavLink>
-            <NavLink
-              to="/alerts"
-              className="relative text-gray-400 hover:text-gray-600 transition-colors"
-              title="Alertas clínicas"
-            >
-              <Bell className="w-5 h-5" />
-              {alertCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-risk-high text-white text-[9px] font-bold flex items-center justify-center animate-pulse-alert">
-                  {alertCount}
-                </span>
-              )}
-            </NavLink>
+            {canPollNotifs && (
+              <NavLink
+                to="/notifications"
+                className="relative text-gray-400 hover:text-gray-600 transition-colors"
+                title="Notificaciones push"
+              >
+                <BellRing className="w-5 h-5" />
+                {notifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {notifCount > 9 ? '9+' : notifCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
+            {canPollAlerts && (
+              <NavLink
+                to="/alerts"
+                className="relative text-gray-400 hover:text-gray-600 transition-colors"
+                title="Alertas clínicas"
+              >
+                <Bell className="w-5 h-5" />
+                {alertCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-risk-high text-white text-[9px] font-bold flex items-center justify-center animate-pulse-alert">
+                    {alertCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
           </div>
         </header>
 

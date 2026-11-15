@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
 import { getRiskBadgeClass, getRiskLabel } from '../utils/validation'
 import {
   Users,
@@ -25,6 +26,9 @@ import {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  // Epic 05 — HU12: el registro de pacientes corresponde a enfermería/admin
+  const canCreatePatient = ['admin', 'nurse'].includes(user?.role)
   const [loading, setLoading] = useState(true)
   const [patients, setPatients] = useState([])
   const [predictions, setPredictions] = useState([])
@@ -131,13 +135,15 @@ export default function Dashboard() {
           <button onClick={fetchDashboardData} className="btn-secondary gap-2" title="Actualizar">
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => navigate('/patients/new')}
-            className="btn-primary gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo Paciente
-          </button>
+          {canCreatePatient && (
+            <button
+              onClick={() => navigate('/patients/new')}
+              className="btn-primary gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo Paciente
+            </button>
+          )}
         </div>
       </div>
 
@@ -227,13 +233,15 @@ export default function Dashboard() {
             <div className="flex flex-col items-center justify-center py-8 text-gray-400">
               <Users className="w-10 h-10 mb-2" />
               <p className="text-sm">No hay pacientes registrados</p>
-              <button
-                onClick={() => navigate('/patients/new')}
-                className="btn-primary gap-2 mt-3 text-xs"
-              >
-                <Plus className="w-3 h-3" />
-                Registrar Paciente
-              </button>
+              {canCreatePatient && (
+                <button
+                  onClick={() => navigate('/patients/new')}
+                  className="btn-primary gap-2 mt-3 text-xs"
+                >
+                  <Plus className="w-3 h-3" />
+                  Registrar Paciente
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto max-h-80 overflow-y-auto">

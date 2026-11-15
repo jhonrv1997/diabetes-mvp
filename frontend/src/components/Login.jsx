@@ -111,10 +111,13 @@ export default function Login() {
               )}
             </button>
           </form>
+
+         
+		  
         </div>
 
         <p className="text-center text-primary-200 text-xs mt-6">
-          Sistema de detección temprana de Diabetes Tipo 2 v1.0
+          Sistema de detección temprana de Diabetes Tipo 2 v2.0
         </p>
       </div>
     </div>
